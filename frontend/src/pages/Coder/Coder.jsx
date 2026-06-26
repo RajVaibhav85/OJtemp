@@ -8,11 +8,18 @@ const DB_API = `${BACKEND_URL}/api/db`;
 const AI_API = `${BACKEND_URL}/api/ai`;
 const AUTH_API = `${BACKEND_URL}/api/auth`;
 
+// const boilerplates = {
+//     cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your code here\n    return 0;\n}`,
+//     python: `# Write your code here\nprint("Hello World")`,
+//     javascript: `// Write your code here\nconsole.log("Hello World");`,
+//     java: `public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello");\n    }\n}`
+// };
+
 const boilerplates = {
-    cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your code here\n    return 0;\n}`,
-    python: `# Write your code here\nprint("Hello World")`,
-    javascript: `// Write your code here\nconsole.log("Hello World");`,
-    java: `public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello");\n    }\n}`
+    cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    int number;\n    // Read input\n    cin >> number;\n    // Write output\n    cout << "You entered: " << number << endl;\n    return 0;\n}`,
+    python: `# Read input from standard input\nuser_input = input()\n# Write output\nprint(f"You entered: {user_input}")`,
+    javascript: `// In Node.js, reading from standard input requires standard streams\nconst fs = require('fs');\n\nfunction main() {\n    // Reads all input from standard input\n    const input = fs.readFileSync(0, 'utf-8').trim();\n    console.log("You entered: " + input);\n}\n\nmain();`,
+    java: `import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        // Read input\n        if (scanner.hasNext()) {\n            String input = scanner.next();\n            System.out.println("You entered: " + input);\n        }\n        scanner.close();\n    }\n}`
 };
 
 const languageMapping = {
