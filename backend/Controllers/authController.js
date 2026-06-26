@@ -166,4 +166,4 @@ module.exports = {
     refresh,
     me,
     changePassword
-}
+};

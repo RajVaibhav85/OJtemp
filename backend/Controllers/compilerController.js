@@ -68,6 +68,12 @@ const BASELINE_MEMORY_MB = {
  *   --read-only        → container filesystem is read-only (except /tmp)
  *   -v ...:/workspace:ro → job directory mounted read-only
  *   --rm               → container auto-removed after execution
+ *
+ *   NOTE: /tmp is mounted with `exec` explicitly. Docker's --tmpfs flag
+ *   defaults to noexec even when you don't write it — compiled languages
+ *   (cpp, java) need to execute their build output from /tmp, so exec must
+ *   be requested explicitly or every compiled-language run fails with
+ *   "Permission denied".
  */
 const executeInDockerSandbox = (language, jobDir, sourceFileName) => {
     return new Promise((resolve, reject) => {
@@ -86,7 +92,7 @@ const executeInDockerSandbox = (language, jobDir, sourceFileName) => {
             '--cpus="1.0"',
             '--pids-limit 50',
             '--read-only',
-            '--tmpfs /tmp:rw,noexec,nosuid,size=64m',
+            '--tmpfs /tmp:rw,exec,nosuid,size=64m',
             `-v "${absoluteJobDir}":/workspace:ro`,
             config.dockerImage,
             `sh -c "${config.runCommand.replace(/"/g, '\\"')}"`,
