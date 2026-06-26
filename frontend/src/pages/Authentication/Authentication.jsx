@@ -154,6 +154,46 @@ const s = {
 const focusOn = (e) => { e.target.style.borderColor = '#a78bfa'; e.target.style.boxShadow = '0 0 0 3px rgba(167, 139, 250, 0.18)'; }
 const focusOff = (e) => { e.target.style.borderColor = 'rgba(167, 139, 250, 0.16)'; e.target.style.boxShadow = 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.2)'; }
 
+const EyeIcon = ({ visible }) => visible ? (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+) : (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+  </svg>
+)
+
+const PasswordInput = ({ name, value, onChange, placeholder, disabled }) => {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        style={{ ...s.input, paddingRight: '42px' }}
+        type={show ? 'text' : 'password'}
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required
+        disabled={disabled}
+        onFocus={focusOn}
+        onBlur={focusOff}
+      />
+      <button
+        type="button"
+        onClick={() => setShow(v => !v)}
+        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#b4aed1', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', transition: 'color 0.15s ease' }}
+        onMouseEnter={e => e.currentTarget.style.color = '#a78bfa'}
+        onMouseLeave={e => e.currentTarget.style.color = '#b4aed1'}
+        tabIndex={-1}
+      >
+        <EyeIcon visible={show} />
+      </button>
+    </div>
+  )
+}
+
 export default function Auth() {
   const { user, loading: authLoading, login, register } = useAuth()
   const navigate = useNavigate()
@@ -242,10 +282,7 @@ export default function Auth() {
             </div>
             <div style={s.group}>
               <label style={s.label}>Password</label>
-              <input style={s.input} type="password" name="password"
-                value={loginForm.password} onChange={handleChange(setLoginForm)}
-                placeholder="••••••••" required disabled={loading}
-                onFocus={focusOn} onBlur={focusOff} />
+              <PasswordInput name="password" value={loginForm.password} onChange={handleChange(setLoginForm)} placeholder="••••••••" disabled={loading} />
             </div>
             <button
               type="submit"
@@ -292,17 +329,11 @@ export default function Auth() {
             <div style={s.row}>
               <div style={s.group}>
                 <label style={s.label}>Password</label>
-                <input style={s.input} type="password" name="password"
-                  value={signupForm.password} onChange={handleChange(setSignupForm)}
-                  placeholder="••••••••" required disabled={loading}
-                  onFocus={focusOn} onBlur={focusOff} />
+                <PasswordInput name="password" value={signupForm.password} onChange={handleChange(setSignupForm)} placeholder="••••••••" disabled={loading} />
               </div>
               <div style={s.group}>
                 <label style={s.label}>Confirm</label>
-                <input style={s.input} type="password" name="confirmPassword"
-                  value={signupForm.confirmPassword} onChange={handleChange(setSignupForm)}
-                  placeholder="••••••••" required disabled={loading}
-                  onFocus={focusOn} onBlur={focusOff} />
+                <PasswordInput name="confirmPassword" value={signupForm.confirmPassword} onChange={handleChange(setSignupForm)} placeholder="••••••••" disabled={loading} />
               </div>
             </div>
             <button

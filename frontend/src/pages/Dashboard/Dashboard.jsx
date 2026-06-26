@@ -41,6 +41,7 @@ export default function Dashboard() {
   const { username } = useParams()
 
   const [problems, setProblems] = useState([])
+  const [solvedProblems, setSolvedProblems] = useState(new Set())
   const [search, setSearch] = useState('')
   const [difficulty, setDifficulty] = useState('')
   const [selectedTags, setSelectedTags] = useState([])
@@ -59,7 +60,17 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return
-    
+    fetch(`${BACKEND_URL}/api/profile/get-profile`, { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        const list = data?.stats?.solvedProblemsList || []
+        setSolvedProblems(new Set(list))
+      })
+      .catch(() => {})
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
     const params = new URLSearchParams()
     if (difficulty) params.append('difficulty', difficulty)
     if (search) params.append('search', search)
@@ -252,6 +263,11 @@ export default function Dashboard() {
                     {p.difficulty}
                   </span>
                   <span style={{ color: '#6f6790', fontSize: '16px', fontWeight: '600' }}>→</span>
+                  {solvedProblems.has(p.code) && (
+                    <span title="Solved" style={{ marginLeft: '10px', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(52, 211, 153, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </span>
+                  )}
                 </div>
               ))
             )}

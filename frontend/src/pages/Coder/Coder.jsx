@@ -8,13 +8,6 @@ const DB_API = `${BACKEND_URL}/api/db`;
 const AI_API = `${BACKEND_URL}/api/ai`;
 const AUTH_API = `${BACKEND_URL}/api/auth`;
 
-// const boilerplates = {
-//     cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your code here\n    return 0;\n}`,
-//     python: `# Write your code here\nprint("Hello World")`,
-//     javascript: `// Write your code here\nconsole.log("Hello World");`,
-//     java: `public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello");\n    }\n}`
-// };
-
 const boilerplates = {
     cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    int number;\n    // Read input\n    cin >> number;\n    // Write output\n    cout << "You entered: " << number << endl;\n    return 0;\n}`,
     python: `# Read input from standard input\nuser_input = input()\n# Write output\nprint(f"You entered: {user_input}")`,
@@ -61,6 +54,7 @@ export default function Coder() {
     const [verdictMessage, setVerdictMessage] = useState('');
 
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [isSolved, setIsSolved] = useState(false);
     const [aiReviewData, setAiReviewData] = useState(null);
     const [aiReviewError, setAiReviewError] = useState('');
     const [codeCopied, setCodeCopied] = useState(false);
@@ -100,6 +94,16 @@ export default function Coder() {
                 if (!isMounted) return;
                 setProblem(probData);
                 setTestCases(Array.isArray(tcData) ? tcData : (tcData.data || []));
+
+                // Check whether this problem is already solved by the user
+                try {
+                    const profileRes = await fetch(`${BACKEND_URL}/api/profile/get-profile`, { credentials: 'include' });
+                    if (profileRes.ok) {
+                        const profileData = await profileRes.json();
+                        const solvedList = profileData?.stats?.solvedProblemsList || [];
+                        if (isMounted) setIsSolved(solvedList.includes(probData.code));
+                    }
+                } catch (_) { /* non-critical, silently skip */ }
 
                 if (probData?.sampleInput) {
                     setCustomInput(typeof probData.sampleInput === 'string' ? probData.sampleInput : JSON.stringify(probData.sampleInput));
@@ -318,6 +322,7 @@ export default function Coder() {
                 
                 if (subRes.ok && subData.success) {
                     setCodeCache(prev => ({ ...prev, [language]: activeCodeBuffer }));
+                    if (!errorsFound) setIsSolved(true);
                     if (subData.data?._id) {
                         
 
@@ -400,13 +405,24 @@ export default function Coder() {
                     >
                         ← Dashboard ({userContext?.username || 'User'})
                     </button>
-                    <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', background: problem.difficulty === 'Easy' ? 'rgba(6, 78, 59, 0.4)' : 'rgba(120, 53, 15, 0.4)', padding: '4px 10px', borderRadius: '20px', color: problem.difficulty === 'Easy' ? '#34d399' : '#fbbf24', border: `1px solid ${problem.difficulty === 'Easy' ? 'rgba(52, 211, 153, 0.2)' : 'rgba(251, 191, 36, 0.2)'}` }}>
-                        {problem.difficulty || 'Medium'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {isSolved && (
+                            <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', background: 'rgba(16, 185, 129, 0.15)', padding: '4px 10px', borderRadius: '20px', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.3)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                Completed
+                            </span>
+                        )}
+                        <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', background: problem.difficulty === 'Easy' ? 'rgba(6, 78, 59, 0.4)' : problem.difficulty === 'Hard' ? 'rgba(127, 29, 29, 0.4)' : 'rgba(120, 53, 15, 0.4)', padding: '4px 10px', borderRadius: '20px', color: problem.difficulty === 'Easy' ? '#34d399' : problem.difficulty === 'Hard' ? '#f87171' : '#fbbf24', border: `1px solid ${problem.difficulty === 'Easy' ? 'rgba(52, 211, 153, 0.2)' : problem.difficulty === 'Hard' ? 'rgba(248, 113, 113, 0.2)' : 'rgba(251, 191, 36, 0.2)'}` }}>
+                            {problem.difficulty || 'Medium'}
+                        </span>
+                    </div>
                 </div>
                 
                 <div style={{ padding: '2rem 1.5rem', overflowY: 'auto', flex: 1, lineHeight: '1.6' }}>
-                    <h1 style={{ margin: '0 0 16px 0', fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em', color: '#f3f0ff' }}>{problem.name || 'Untitled Problem'}</h1>
+                    <h1 style={{ margin: '0 0 10px 0', fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em', color: '#f3f0ff' }}>{problem.name || 'Untitled Problem'}</h1>
+                    {problem.description && (
+                        <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#8b82b0', lineHeight: '1.55', fontStyle: 'italic', borderLeft: '2px solid rgba(167, 139, 250, 0.25)', paddingLeft: '12px' }}>{problem.description}</p>
+                    )}
                     <p style={{ color: '#c7bfe0', whiteSpace: 'pre-wrap', fontSize: '14px' }}>{problem.statement}</p>
                     
                     {problem.constraints && (
