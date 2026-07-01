@@ -19,5 +19,7 @@ router.delete('/delete-testcase/:id', dbController.deleteTestCase);
 router.post('/submit-solution/:code', dbController.submitSolution);
 router.put('/update-solution-verdict/:id', dbController.updateSolutionVerdict);
 router.get('/latest-submission/:userId/:problemId', dbController.getLatestSubmission);
+router.get('/user-submissions/:userId', dbController.getUserSubmissions);
+router.get('/problem-submissions/:userId/:problemId', dbController.getProblemSubmissions);
 
 module.exports = router;

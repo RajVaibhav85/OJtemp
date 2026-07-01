@@ -91,6 +91,9 @@ export default function Profile() {
     solvedProblemsList: []
   });
 
+  const [submissions, setSubmissions] = useState([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(true);
+
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
@@ -125,6 +128,40 @@ export default function Profile() {
     };
     fetchProfileData();
   }, []);
+
+  useEffect(() => {
+    const fetchSubmissions = async () => {
+      const userId = user?._id || user?.id;
+      if (!userId) {
+        setLoadingSubmissions(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/db/user-submissions/${userId}`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSubmissions(Array.isArray(data.data) ? data.data : []);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingSubmissions(false);
+      }
+    };
+    fetchSubmissions();
+  }, [user]);
+
+  // Clicking a submission takes the user straight back into the editor with
+  // that exact version of the code loaded. Route is /:username/:code.
+  const handleOpenSubmission = (sub) => {
+    if (!sub.problem?.code) return;
+    const username = user?.username;
+    if (!username) return;
+    navigate(`/${username}/${sub.problem.code}`, { state: { loadSubmission: sub } });
+  };
 
   const handleToggleLanguage = (lang) => {
     setSelectedLanguages(prev => prev.includes(lang) ? prev.filter(i => i !== lang) : [...prev, lang]);
@@ -355,6 +392,43 @@ export default function Profile() {
                   <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>No problem sets completed on this dev account.</span>
                )}
             </div>
+          </div>
+
+          {/* Sub-Card 4: Full Submission History, clickable back into the editor */}
+          <div style={s.card}>
+            <h3 style={s.title}>Submission History</h3>
+            {loadingSubmissions ? (
+              <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>Loading submissions...</span>
+            ) : submissions.length === 0 ? (
+              <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>No submissions yet. Once you submit a solution, every attempt will show up here.</span>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '360px', overflowY: 'auto', paddingRight: '4px' }}>
+                {submissions.map(sub => {
+                  const verdictColor = sub.verdict === 'Accepted' ? '#34d399' : (sub.verdict === 'Pending' ? '#fbbf24' : '#f87171');
+                  return (
+                    <div
+                      key={sub._id}
+                      onClick={() => handleOpenSubmission(sub)}
+                      style={{ cursor: 'pointer', background: 'rgba(12, 6, 28, 0.35)', border: `1px solid ${verdictColor}33`, borderRadius: '10px', padding: '12px 14px', transition: 'background 0.2s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(167, 139, 250, 0.08)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(12, 6, 28, 0.35)'}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: '600', fontSize: '13px', color: '#f3f0ff' }}>{sub.problem?.name || sub.problem?.code || 'Unknown problem'}</span>
+                        <span style={{ fontWeight: '700', fontSize: '12px', color: verdictColor }}>{sub.verdict}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', fontSize: '11.5px', color: '#8d85ab', marginTop: '4px' }}>
+                        <span>{sub.language}</span>
+                        {typeof sub.testsTotal === 'number' && sub.testsTotal > 0 && (
+                          <span>{sub.testsPassed ?? 0}/{sub.testsTotal} passed</span>
+                        )}
+                        <span>{new Date(sub.submittedAt || sub.createdAt).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
         </div>

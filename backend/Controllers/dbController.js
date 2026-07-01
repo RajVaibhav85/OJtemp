@@ -308,24 +308,17 @@ const submitSolution = async (req, res) => {
             });
         }
 
-        // Use findOneAndUpdate with upsert: true to replace or create records dynamically
-        const solution = await Solution.findOneAndUpdate(
-            { 
-                user: userId, 
-                problem: problemId, 
-                language: language 
-            }, // Unique selection constraint matching criteria
-            { 
-                code: code,
-                verdict: 'Pending', // Reset verdict status during the compilation sequence pipeline
-                submittedAt: new Date()
-            }, 
-            { 
-                upsert: true, 
-                returnDocument: 'after', // Avoids deprecation warnings instead of using 'new: true'
-                runValidators: true 
-            }
-        );
+        // Every submission is now stored as its own document (1user1problem1lang1code
+        // policy removed), so we always create a fresh record instead of upserting
+        // over the previous attempt.
+        const solution = await Solution.create({
+            user: userId,
+            problem: problemId,
+            language: language,
+            code: code,
+            verdict: 'Pending', // Reset verdict status during the compilation sequence pipeline
+            submittedAt: new Date()
+        });
 
         return res.status(200).json({ 
             success: true, 
@@ -345,12 +338,12 @@ const submitSolution = async (req, res) => {
 const updateSolutionVerdict = async (req, res) => {
     try {
         const { id } = req.params;
-        const { verdict, executionTime, memory, output } = req.body;
+        const { verdict, executionTime, memory, output, testsPassed, testsTotal } = req.body;
 
         // 1. Update the solution document
         const updatedSolution = await Solution.findByIdAndUpdate(
             id,
-            { $set: { verdict, executionTime, memory, output } },
+            { $set: { verdict, executionTime, memory, output, testsPassed, testsTotal } },
             { new: true }
         );
 
@@ -428,6 +421,49 @@ const getLatestSubmission = async (req, res) => {
   }
 };
 
+// --- ALL SUBMISSIONS BY A USER (used by the Profile page's submission history) ---
+const getUserSubmissions = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const submissions = await Solution.find({ user: userId })
+      .populate('problem', 'name code difficulty')
+      .sort({ submittedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: submissions.length,
+      data: submissions
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching user submissions: " + error.message
+    });
+  }
+};
+
+// --- ALL SUBMISSIONS FOR A SPECIFIC USER + PROBLEM (used by the Coder page's history tab) ---
+const getProblemSubmissions = async (req, res) => {
+  try {
+    const { userId, problemId } = req.params;
+
+    const submissions = await Solution.find({ user: userId, problem: problemId })
+      .sort({ submittedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: submissions.length,
+      data: submissions
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching problem submissions: " + error.message
+    });
+  }
+};
+
 module.exports = {
     insertProblem,
     getProblems,
@@ -440,7 +476,9 @@ module.exports = {
     deleteTestCase,
     submitSolution,
     updateSolutionVerdict,
-    getLatestSubmission // Exported here
+    getLatestSubmission, // Kept for backwards compatibility
+    getUserSubmissions,
+    getProblemSubmissions
 };
 
 // ### INSERT PROBLEM

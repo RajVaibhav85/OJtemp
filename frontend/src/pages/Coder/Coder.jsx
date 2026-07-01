@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
@@ -20,13 +20,19 @@ const languageMapping = {
     toFrontend: { 'C++': 'cpp', 'JavaScript': 'javascript', 'Python': 'python', 'Java': 'java' }
 };
 
+// Key used to auto-save whatever is currently in the editor so an accidental
+// refresh (or tab close) never loses unsaved work. Scoped per problem + language.
+const getDraftKey = (problemCode, lang) => `oj-draft:${problemCode}:${lang}`;
+
 export default function Coder() {
     const { code: problemCode } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const containerRef = useRef(null);
     const rightPanelRef = useRef(null);
-    const editorRef = useRef(null); 
+    const editorRef = useRef(null);
+    const draftSaveTimeoutRef = useRef(null);
 
     const [userContext, setUserContext] = useState(null);
     const [problem, setProblem] = useState(null);
@@ -55,6 +61,7 @@ export default function Coder() {
 
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [isSolved, setIsSolved] = useState(false);
+    const [submissionHistory, setSubmissionHistory] = useState([]);
     const [aiReviewData, setAiReviewData] = useState(null);
     const [aiReviewError, setAiReviewError] = useState('');
     const [codeCopied, setCodeCopied] = useState(false);
@@ -109,35 +116,58 @@ export default function Coder() {
                     setCustomInput(typeof probData.sampleInput === 'string' ? probData.sampleInput : JSON.stringify(probData.sampleInput));
                 }
 
-                const submissionRes = await fetch(`${DB_API}/latest-submission/${resolvedUserId}/${probData._id}`, {
-                    method: 'GET',
-                    credentials: 'include'
-                });
-
-                if (submissionRes.ok) {
-                    const resJson = await submissionRes.json();
-                    if (resJson.success && resJson.data) {
-                        const targetBackendLanguage = languageMapping.toBackend[language];
-                        let matchingSubmission = null;
-                        
-                        if (Array.isArray(resJson.data)) {
-                            matchingSubmission = resJson.data.find(sub => sub.language === targetBackendLanguage);
-                        } else if (resJson.data.language === targetBackendLanguage) {
-                            matchingSubmission = resJson.data;
-                        }
-
-                        if (matchingSubmission && matchingSubmission.code) {
-                            setCodeCache(prev => ({ ...prev, [language]: matchingSubmission.code }));
-                            if (editorRef.current) {
-                                editorRef.current.setValue(matchingSubmission.code);
-                            }
-                            return;
-                        }
+                // Full submission history for this problem, across every language and
+                // every past attempt (the old 1user1problem1lang1code policy is gone,
+                // so this can now contain many entries).
+                let historyData = [];
+                try {
+                    const historyRes = await fetch(`${DB_API}/problem-submissions/${resolvedUserId}/${probData._id}`, {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
+                    if (historyRes.ok) {
+                        const historyJson = await historyRes.json();
+                        historyData = Array.isArray(historyJson.data) ? historyJson.data : [];
                     }
+                } catch (_) { /* non-critical, silently skip */ }
+
+                if (isMounted) setSubmissionHistory(historyData);
+
+                // Resolve which code should be sitting in the editor when the page opens.
+                // Priority:
+                //   1) A specific submission the user clicked on the Profile page (navigation state)
+                //   2) A localStorage draft (protects against accidental refresh/close)
+                //   3) The most recent submission for the active language
+                //   4) Language boilerplate
+                const incomingSubmission = location.state?.loadSubmission || null;
+
+                let initialLang = language;
+                let initialCode = null;
+
+                if (incomingSubmission) {
+                    initialLang = languageMapping.toFrontend[incomingSubmission.language] || 'cpp';
+                    initialCode = incomingSubmission.code;
                 }
 
-                if (editorRef.current) {
-                    editorRef.current.setValue(codeCache[language] || boilerplates[language]);
+                if (initialCode === null) {
+                    try {
+                        const draft = localStorage.getItem(getDraftKey(problemCode, initialLang));
+                        if (draft) initialCode = draft;
+                    } catch (_) { /* localStorage unavailable, skip */ }
+                }
+
+                if (initialCode === null) {
+                    const backendLang = languageMapping.toBackend[initialLang];
+                    const latestMatch = historyData.find(sub => sub.language === backendLang);
+                    if (latestMatch?.code) initialCode = latestMatch.code;
+                }
+
+                if (initialCode === null) initialCode = boilerplates[initialLang];
+
+                if (isMounted) {
+                    setCodeCache(prev => ({ ...prev, [initialLang]: initialCode }));
+                    if (initialLang !== language) setLanguage(initialLang);
+                    if (editorRef.current) editorRef.current.setValue(initialCode);
                 }
 
             } catch (err) {
@@ -150,19 +180,89 @@ export default function Coder() {
 
         syncWorkspaceSessionData();
         return () => { isMounted = false; };
-    }, [problemCode, language, navigate]);
+        // Intentionally NOT depending on `language` — switching languages is handled
+        // by handleLanguageChange below, so this effect only reruns when navigating
+        // to a different problem (or a different submission is picked from Profile).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [problemCode, navigate, location.key]);
 
     const handleEditorDidMount = (editor) => {
         editorRef.current = editor;
         editor.setValue(codeCache[language]);
     };
 
+    // Saves whatever is currently in the editor to localStorage, debounced, so an
+    // accidental refresh never wipes out work in progress.
+    const handleEditorChange = (value) => {
+        if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        draftSaveTimeoutRef.current = setTimeout(() => {
+            try {
+                localStorage.setItem(getDraftKey(problemCode, language), value ?? '');
+            } catch (_) { /* localStorage unavailable, skip */ }
+        }, 400);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+        };
+    }, []);
+
+    // Figures out what code to show for a language we haven't actively loaded yet
+    // this session: draft > most recent submission for that language > boilerplate.
+    const resolveCodeForLanguage = (lang) => {
+        try {
+            const draft = localStorage.getItem(getDraftKey(problemCode, lang));
+            if (draft) return draft;
+        } catch (_) { /* localStorage unavailable, skip */ }
+
+        const backendLang = languageMapping.toBackend[lang];
+        const latestMatch = submissionHistory.find(sub => sub.language === backendLang);
+        if (latestMatch?.code) return latestMatch.code;
+
+        return boilerplates[lang];
+    };
+
     const handleLanguageChange = (newLang) => {
         if (editorRef.current) {
             const codeToPreserve = editorRef.current.getValue();
             setCodeCache(prev => ({ ...prev, [language]: codeToPreserve }));
+            try {
+                localStorage.setItem(getDraftKey(problemCode, language), codeToPreserve);
+            } catch (_) { /* localStorage unavailable, skip */ }
         }
+
+        const nextCode = (codeCache[newLang] && codeCache[newLang] !== boilerplates[newLang])
+            ? codeCache[newLang]
+            : resolveCodeForLanguage(newLang);
+
+        setCodeCache(prev => ({ ...prev, [newLang]: nextCode }));
         setLanguage(newLang);
+        if (editorRef.current) editorRef.current.setValue(nextCode);
+    };
+
+    // Loads a specific past submission into the editor (from the Submission History
+    // tab on this page). Switches language if needed and preserves whatever was
+    // being worked on in the previously active language.
+    const applySubmissionToEditor = (sub) => {
+        const feLang = languageMapping.toFrontend[sub.language] || 'cpp';
+
+        if (editorRef.current && feLang !== language) {
+            const currentCode = editorRef.current.getValue();
+            setCodeCache(prev => ({ ...prev, [language]: currentCode }));
+            try {
+                localStorage.setItem(getDraftKey(problemCode, language), currentCode);
+            } catch (_) { /* localStorage unavailable, skip */ }
+        }
+
+        setCodeCache(prev => ({ ...prev, [feLang]: sub.code }));
+        try {
+            localStorage.setItem(getDraftKey(problemCode, feLang), sub.code);
+        } catch (_) { /* localStorage unavailable, skip */ }
+
+        setLanguage(feLang);
+        if (editorRef.current) editorRef.current.setValue(sub.code);
+        setConsoleMode('custom');
     };
 
     const getActiveCode = () => {
@@ -294,6 +394,8 @@ export default function Coder() {
 
             const errorsFound = outputs.some(item => !item.passed);
             const absoluteVerdict = errorsFound ? 'Wrong Answer' : 'Accepted';
+            const testsPassedCount = outputs.filter(item => item.passed).length;
+            const testsTotalCount = outputs.length;
 
 
             setVerdictMessage(
@@ -333,10 +435,21 @@ export default function Coder() {
                                 verdict: absoluteVerdict,
                                 executionTime: maxTimeSpent,      // Replaced static 18 with true calculated value
                                 memory: maxMemoryConsumed,        // Replaced static 32 with true calculated value
-                                output: errorsFound ? 'Assertion mismatch trace metrics recorded.' : 'All compilation limits valid.'
+                                output: errorsFound ? 'Assertion mismatch trace metrics recorded.' : 'All compilation limits valid.',
+                                testsPassed: testsPassedCount,
+                                testsTotal: testsTotalCount
                             }),
                             credentials: 'include'
                         });
+
+                        // Refresh the Submission History tab so the new attempt shows up immediately.
+                        try {
+                            const historyRes = await fetch(`${DB_API}/problem-submissions/${resolvedUserId}/${problem._id}`, { credentials: 'include' });
+                            if (historyRes.ok) {
+                                const historyJson = await historyRes.json();
+                                setSubmissionHistory(Array.isArray(historyJson.data) ? historyJson.data : []);
+                            }
+                        } catch (_) { /* non-critical, silently skip */ }
                     }
                 } else {
                     setVerdictMessage(`❌ Sync Failure: ${subData.message || 'Database tier rejected transactional synchronization.'}`);
@@ -476,6 +589,7 @@ export default function Coder() {
                         theme="vs-dark"
                         language={language}
                         onMount={handleEditorDidMount}
+                        onChange={handleEditorChange}
                         options={{ fontSize: 13.5, minimap: { enabled: false }, automaticLayout: true, padding: { top: 12 } }}
                     />
                 </div>
@@ -487,17 +601,19 @@ export default function Coder() {
                     <div style={{ display: 'flex', background: 'rgba(12, 6, 28, 0.45)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                         <button onClick={() => setConsoleMode('custom')} style={{ padding: '12px 20px', background: consoleMode === 'custom' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'custom' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'custom' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Custom Console</button>
                         <button onClick={() => setConsoleMode('testcases')} style={{ padding: '12px 20px', background: consoleMode === 'testcases' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'testcases' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'testcases' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Test Run Evaluation Matrix {executionResults && `(${executionResults.filter(r => r.passed).length}/${executionResults.length})`}</button>
+                        <button onClick={() => setConsoleMode('submissions')} style={{ padding: '12px 20px', background: consoleMode === 'submissions' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'submissions' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'submissions' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Submission History {submissionHistory.length > 0 && `(${submissionHistory.length})`}</button>
                     </div>
 
                     <div style={{ flex: 1, padding: '1.25rem', overflowY: 'auto' }}>
-                        {consoleMode === 'custom' ? (
+                        {consoleMode === 'custom' && (
                             <div style={{ display: 'flex', gap: '16px', height: '100%', minHeight: '110px' }}>
                                 <textarea value={customInput} onChange={(e) => setCustomInput(e.target.value)} style={{ flex: 1, background: 'rgba(12, 6, 28, 0.35)', color: '#f3f0ff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px', fontFamily: 'Fira Code, monospace', resize: 'none', fontSize: '13px', outline: 'none' }} onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.2)'} onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
                                 <div style={{ flex: 1, background: 'rgba(3, 7, 18, 0.4)', color: customError ? '#f87171' : '#34d399', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px', fontFamily: 'Fira Code, monospace', whiteSpace: 'pre-wrap', fontSize: '13px', overflowY: 'auto', boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.2)' }}>
                                     {customOutput || "Console output buffer trace is empty."}
                                 </div>
                             </div>
-                        ) : (
+                        )}
+                        {consoleMode === 'testcases' && (
                             <div>
                                 {verdictMessage && (
                                     <div style={{ padding: '12px 16px', borderRadius: '8px', background: verdictMessage.includes('🟢') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${verdictMessage.includes('🟢') ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`, color: verdictMessage.includes('🟢') ? '#34d399' : '#f87171', fontWeight: '600', marginBottom: '16px', fontSize: '13px', backdropFilter: 'blur(4px)' }}>
@@ -523,6 +639,37 @@ export default function Coder() {
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        )}
+                        {consoleMode === 'submissions' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {submissionHistory.length === 0 && (
+                                    <div style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>No submissions yet for this problem. Once you submit, every attempt will show up here — click any of them to reload that version into the editor.</div>
+                                )}
+                                {submissionHistory.map((sub) => {
+                                    const verdictColor = sub.verdict === 'Accepted' ? '#34d399' : (sub.verdict === 'Pending' ? '#fbbf24' : '#f87171');
+                                    return (
+                                        <div
+                                            key={sub._id}
+                                            onClick={() => applySubmissionToEditor(sub)}
+                                            style={{ cursor: 'pointer', background: 'rgba(255,255,255,0.02)', border: `1px solid ${verdictColor}33`, borderRadius: '10px', padding: '14px', transition: 'background 0.2s' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                                <span style={{ fontWeight: '700', fontSize: '13px', color: verdictColor }}>{sub.verdict}</span>
+                                                <span style={{ fontSize: '11px', color: '#8d85ab' }}>{new Date(sub.submittedAt || sub.createdAt).toLocaleString()}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '14px', fontSize: '12px', color: '#aaa3c8' }}>
+                                                <span>{sub.language}</span>
+                                                {typeof sub.testsTotal === 'number' && sub.testsTotal > 0 && (
+                                                    <span>{sub.testsPassed ?? 0}/{sub.testsTotal} testcases passed</span>
+                                                )}
+                                                {sub.executionTime != null && <span>{sub.executionTime}ms</span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
