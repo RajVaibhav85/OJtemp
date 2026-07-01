@@ -16,5 +16,8 @@ router.put('/change-password', protect, authController.changePassword);
 
 router.get('/me', protect, authController.me);
 
+router.get('/verify/:token', authController.verifyEmail);
+
+router.post('/resend-verification', authController.resendVerification);
 
 module.exports = router;

@@ -55,7 +55,7 @@ const solutionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Index for faster queries
-solutionSchema.index({ problem: 1, user: 1 });
+solutionSchema.index({ user: 1, problem: 1, language: 1 }, { unique: true });
 solutionSchema.index({ submittedAt: -1 });
 
 const Solution = mongoose.model('Solution', solutionSchema);

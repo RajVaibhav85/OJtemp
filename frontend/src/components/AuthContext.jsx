@@ -70,7 +70,12 @@ export const AuthProvider = ({ children }) => {
         return { ok: true }
       }
 
-      return { ok: false, message: data.message || `Error: ${res.status}` }
+      return {
+        ok: false,
+        message: data.message || `Error: ${res.status}`,
+        needsVerification: data.needsVerification || false,
+        email: data.email,
+      }
 
     } catch (err) {
       return { ok: false, message: "Network connection lost. Please try again." }
@@ -89,14 +94,58 @@ export const AuthProvider = ({ children }) => {
       const data = await parseJsonSafe(res)
 
       if (res.ok) {
-        setUser(data)
-        return { ok: true }
+        // No cookies are set on register anymore — the account needs email
+        // verification first, so we intentionally don't setUser() here.
+        return { ok: true, message: data.message, email: data.email }
       }
 
       return { ok: false, message: data.message || `Error: ${res.status}` }
 
     } catch (err) {
       return { ok: false, message: "Failed to connect to the registration server." }
+    }
+  }
+
+  const verifyEmail = async (token) => {
+    try {
+      const res = await fetch(`${API}/verify/${token}`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+
+      const data = await parseJsonSafe(res)
+
+      if (res.ok) {
+        setUser(data)
+        return { ok: true, message: data.message }
+      }
+
+      return { ok: false, message: data.message || `Error: ${res.status}` }
+
+    } catch (err) {
+      return { ok: false, message: "Failed to connect to the server." }
+    }
+  }
+
+  const resendVerification = async (email) => {
+    try {
+      const res = await fetch(`${API}/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email }),
+      })
+
+      const data = await parseJsonSafe(res)
+
+      if (res.ok) {
+        return { ok: true, message: data.message }
+      }
+
+      return { ok: false, message: data.message || `Error: ${res.status}` }
+
+    } catch (err) {
+      return { ok: false, message: "Failed to connect to the server." }
     }
   }
 
@@ -111,7 +160,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, verifyEmail, resendVerification }}>
       {children}
     </AuthContext.Provider>
   )

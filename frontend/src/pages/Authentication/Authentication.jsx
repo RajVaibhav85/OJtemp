@@ -2,6 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../components/AuthContext'
 
+const MailIcon = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>
+  </svg>
+)
+
 /*
   Design notes — "Galactic Glass"
   Palette: void #0a0518, nebula #1a0f33, accent violet #a78bfa, accent indigo #818cf8,
@@ -195,13 +201,15 @@ const PasswordInput = ({ name, value, onChange, placeholder, disabled }) => {
 }
 
 export default function Auth() {
-  const { user, loading: authLoading, login, register } = useAuth()
+  const { user, loading: authLoading, login, register, resendVerification } = useAuth()
   const navigate = useNavigate()
 
   const [tab, setTab] = useState('login')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [pendingEmail, setPendingEmail] = useState('')
+  const [resendState, setResendState] = useState('idle') // idle | sending | sent
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [signupForm, setSignupForm] = useState({
@@ -221,12 +229,13 @@ export default function Auth() {
     e.preventDefault()
     loading || setLoading(true)
     setError('')
-    const { ok, message } = await login(loginForm.email, loginForm.password)
+    const { ok, message, needsVerification, email } = await login(loginForm.email, loginForm.password)
     if (ok) {
       setSuccess('Login successful!')
       setTimeout(() => navigate('/dashboard'), 800)
     } else {
       setError(message || 'Login failed')
+      if (needsVerification) setPendingEmail(email || loginForm.email)
     }
     setLoading(false)
   }
@@ -238,22 +247,27 @@ export default function Auth() {
     }
     loading || setLoading(true)
     setError('')
-    const { ok, message } = await register({
+    const { ok, message, email } = await register({
       username: signupForm.username,
       email: signupForm.email,
       password: signupForm.password,
       dob: signupForm.dob,
     })
     if (ok) {
-      setSuccess('Account created!')
-      setTimeout(() => navigate('/dashboard'), 800)
+      setPendingEmail(email || signupForm.email)
     } else {
       setError(message || 'Registration failed')
     }
     setLoading(false)
   }
 
-  const switchTab = (t) => { setTab(t); setError(''); setSuccess('') }
+  const handleResend = async () => {
+    setResendState('sending')
+    await resendVerification(pendingEmail)
+    setResendState('sent')
+  }
+
+  const switchTab = (t) => { setTab(t); setError(''); setSuccess(''); setPendingEmail(''); setResendState('idle') }
 
   return (
     <div style={s.page}>
@@ -263,6 +277,36 @@ export default function Auth() {
           <p style={s.subtitle}>Master your coding skills</p>
         </div>
 
+        {pendingEmail ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#a78bfa', marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
+              <MailIcon />
+            </div>
+            <p style={{ color: '#f3f0ff', fontSize: '15px', fontWeight: 600, margin: '0 0 8px' }}>
+              Check your inbox
+            </p>
+            <p style={{ color: '#b4aed1', fontSize: '13px', lineHeight: 1.6, margin: '0 0 1.5rem' }}>
+              We sent a verification link to <strong style={{ color: '#c4b5fd' }}>{pendingEmail}</strong>.
+              Click it to activate your account, then log in.
+            </p>
+
+            <button
+              type="button"
+              style={s.btn(resendState === 'sending')}
+              disabled={resendState === 'sending'}
+              onClick={handleResend}
+            >
+              {resendState === 'sending' ? 'Sending...' : resendState === 'sent' ? 'Link sent again ✓' : 'Resend verification email'}
+            </button>
+
+            <p style={s.switchText}>
+              <button type="button" style={s.switchLink} onClick={() => switchTab('login')}>
+                Back to login
+              </button>
+            </p>
+          </div>
+        ) : (
+        <>
         <div style={s.tabs}>
           <button style={s.tab(tab === 'login')} onClick={() => switchTab('login')}>Login</button>
           <button style={s.tab(tab === 'signup')} onClick={() => switchTab('signup')}>Sign up</button>
@@ -352,6 +396,8 @@ export default function Auth() {
               </button>
             </p>
           </form>
+        )}
+        </>
         )}
       </div>
     </div>
