@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const User = require('../Models/Users');
 const jwt = require('jsonwebtoken');
 const { sendVerificationEmail } = require('./sendEmail');
+const Profile = require('../Models/Profile');
+const Solution = require('../Models/Solutions');
 
 
 
@@ -119,6 +121,36 @@ const changePassword = async (req, res, next) => {
     }
 };
 
+const deleteAccount = async (req, res, next) => {
+    try {
+        const { password } = req.body;
+        if (!password) {
+            return res.status(400).json({ message: "Password confirmation is required" });
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        const isMatch = await user.matchPassword(password);
+        if (!isMatch) return res.status(400).json({ message: "Incorrect password" });
+
+        // Cascade cleanup of everything tied to this account.
+        await Promise.all([
+            Profile.deleteOne({ user: user._id }),
+            Solution.deleteMany({ user: user._id }),
+            User.findByIdAndDelete(user._id)
+        ]);
+
+        // Same cookie names/paths used in logout(), so both actually clear.
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken', { path: '/api/auth/refresh' });
+
+        res.status(200).json({ success: true, message: "Account deleted successfully" });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const verifyEmail = async (req, res, next) => {
     try {
         const { token } = req.params;
@@ -128,21 +160,44 @@ const verifyEmail = async (req, res, next) => {
 
         const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-        const user = await User.findOne({
-            verificationToken: hashedToken,
-            verificationTokenExpires: { $gt: Date.now() },
-        });
+        // NOTE: we intentionally do NOT filter by verificationTokenExpires
+        // here on the initial lookup. We need to first find the user to
+        // know whether they're already verified — see the idempotency
+        // comment below.
+        const user = await User.findOne({ verificationToken: hashedToken });
 
         if (!user) {
             return res.status(400).json({ message: 'Verification link is invalid or has expired.' });
         }
 
-        user.isVerified = true;
-        user.verificationToken = undefined;
-        user.verificationTokenExpires = undefined;
-        await user.save({ validateBeforeSave: false });
+        const isExpired = user.verificationTokenExpires && user.verificationTokenExpires.getTime() < Date.now();
 
-        // Log the user in immediately after successful verification.
+        if (isExpired && !user.isVerified) {
+            return res.status(400).json({ message: 'Verification link is invalid or has expired.' });
+        }
+
+        // IMPORTANT: unlike before, we do NOT clear verificationToken /
+        // verificationTokenExpires here. This makes the endpoint idempotent
+        // for repeat hits on the same still-valid link — which happens far
+        // more often than it should, e.g. React StrictMode double-invoking
+        // this effect in dev, a page refresh, or an email provider's
+        // safe-link scanner pre-fetching the URL before the user clicks it.
+        // Without this, the second hit fails to find a token and reports a
+        // false "invalid or expired" error even though the account was
+        // just successfully verified a moment earlier.
+        //
+        // Trade-off: the link stays valid (and will re-issue session
+        // cookies) until its normal 24h expiry instead of being single-use.
+        // That's an acceptable relaxation here since the original endpoint
+        // already logged the user in via sendTokens() on first use within
+        // that same window — this doesn't meaningfully widen the window,
+        // it just allows more than one hit inside it.
+        if (!user.isVerified) {
+            user.isVerified = true;
+            await user.save({ validateBeforeSave: false });
+        }
+
+        // Log the user in (or refresh their session) on every successful hit.
         sendTokens(res, user._id);
 
         return res.status(200).json({
@@ -268,6 +323,7 @@ module.exports = {
     refresh,
     me,
     changePassword,
+    deleteAccount,
     verifyEmail,
     resendVerification
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../components/AuthContext'
 
@@ -47,18 +47,30 @@ export default function VerifyEmail() {
   const navigate = useNavigate()
   const [status, setStatus] = useState('verifying') // verifying | success | error
   const [message, setMessage] = useState('')
+  const calledRef = useRef(false)
 
   useEffect(() => {
-    let active = true
+    // Strict Mode (dev) mounts this effect, cleans it up, then mounts it
+    // again — without this guard, run() would fire the verify request
+    // twice for a single page visit. calledRef persists across that
+    // mount/cleanup/remount cycle (unlike a plain variable declared inside
+    // the effect), so the second mount sees it's already been called and
+    // skips re-sending the request. Since this guard already makes run()
+    // fire exactly once for the component's lifetime, there's no need for
+    // an extra "active" cancellation flag — that flag was being set to
+    // false by mount 1's own cleanup before its run() had resolved, which
+    // silently dropped the state update for the one call that actually
+    // succeeded.
+    if (calledRef.current) return
+    calledRef.current = true
+
     const run = async () => {
       const { ok, message } = await verifyEmail(token)
-      if (!active) return
       setStatus(ok ? 'success' : 'error')
       setMessage(message || (ok ? 'Email verified!' : 'Verification failed.'))
       if (ok) setTimeout(() => navigate('/dashboard'), 1500)
     }
     run()
-    return () => { active = false }
   }, [token])
 
   return (

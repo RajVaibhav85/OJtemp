@@ -305,20 +305,30 @@ export default function AdminPanel() {
         <p style={s.navTitle}>
           <span style={{ color: '#a78bfa', filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.5))' }}>⚙️</span> Core Repository Panel
         </p>
-        <button 
-          style={s.btnSecondary} 
-          onClick={() => navigate(`/${user.username}`)}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)';
-            e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.28)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)';
-            e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.14)';
-          }}
-        >
-          Back to Dashboard
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            style={{ ...s.btnSecondary, background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.25)', color: '#fbbf24' }}
+            onClick={() => navigate('/contests/admin')}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245, 158, 11, 0.18)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(245, 158, 11, 0.1)'; }}
+          >
+            🏆 Manage Contests
+          </button>
+          <button 
+            style={s.btnSecondary} 
+            onClick={() => navigate(`/${user.username}`)}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)';
+              e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.28)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)';
+              e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.14)';
+            }}
+          >
+            Back to Dashboard
+          </button>
+        </div>
       </nav>
 
       <main style={s.main}>

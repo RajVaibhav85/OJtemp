@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
@@ -7,6 +7,7 @@ const COMPILER_API = `${BACKEND_URL}/api/compiler`;
 const DB_API = `${BACKEND_URL}/api/db`;
 const AI_API = `${BACKEND_URL}/api/ai`;
 const AUTH_API = `${BACKEND_URL}/api/auth`;
+const CONTEST_API = `${BACKEND_URL}/api/contests`;
 
 const boilerplates = {
     cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    int number;\n    // Read input\n    cin >> number;\n    // Write output\n    cout << "You entered: " << number << endl;\n    return 0;\n}`,
@@ -28,6 +29,15 @@ export default function Coder() {
     const { code: problemCode } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
+    const [searchParams] = useSearchParams();
+
+    // Contest mode: present only when this page was opened from a contest
+    // attempt (?contestId=...). Everything below is a no-op when it's absent,
+    // so the normal practice-mode workflow is completely unaffected.
+    const contestId = searchParams.get('contestId');
+    const [contestInfo, setContestInfo] = useState(null); // { endTime, isOfficial, title }
+    const [remainingSeconds, setRemainingSeconds] = useState(null);
+    const contestFinishedRef = useRef(false);
 
     const containerRef = useRef(null);
     const rightPanelRef = useRef(null);
@@ -185,6 +195,79 @@ export default function Coder() {
         // to a different problem (or a different submission is picked from Profile).
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [problemCode, navigate, location.key]);
+
+    // Contest mode: join (or resume) the attempt as soon as we know who the
+    // user is. join is idempotent server-side — resuming an in-progress
+    // attempt just returns its existing endTime/isOfficial, it never resets
+    // the clock.
+    useEffect(() => {
+        if (!contestId || !userContext) return;
+        let cancelled = false;
+        const resolvedUserId = userContext._id || userContext.id;
+
+        fetch(`${CONTEST_API}/${contestId}/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: resolvedUserId }),
+            credentials: 'include'
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (cancelled || !data.success) return;
+                setContestInfo({
+                    endTime: data.data.contestEndTime,
+                    isOfficial: data.data.attempt.isOfficial,
+                });
+            })
+            .catch(() => { /* contest banner just won't show; problem still solvable normally */ });
+
+        return () => { cancelled = true; };
+    }, [contestId, userContext]);
+
+    // Ticks the countdown and auto-finishes the attempt the moment time runs
+    // out, so a user who walks away mid-contest still gets scored on
+    // whatever they'd solved rather than being left in limbo.
+    useEffect(() => {
+        if (!contestInfo?.endTime) return;
+
+        const tick = () => {
+            const secondsLeft = Math.max(0, Math.round((new Date(contestInfo.endTime).getTime() - Date.now()) / 1000));
+            setRemainingSeconds(secondsLeft);
+            if (secondsLeft === 0 && !contestFinishedRef.current) {
+                contestFinishedRef.current = true;
+                handleFinishContest();
+            }
+        };
+
+        tick();
+        const intervalId = setInterval(tick, 1000);
+        return () => clearInterval(intervalId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [contestInfo]);
+
+    const handleFinishContest = async () => {
+        if (!contestId || !userContext) return;
+        const resolvedUserId = userContext._id || userContext.id;
+        try {
+            await fetch(`${CONTEST_API}/${contestId}/finish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: resolvedUserId }),
+                credentials: 'include'
+            });
+        } catch (_) { /* best-effort — evaluation page will still compute from whatever was recorded */ }
+        navigate(`/contests/${contestId}/evaluation`);
+    };
+
+    const formatCountdown = (secs) => {
+        if (secs == null) return '--:--';
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        return h > 0
+            ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+            : `${m}:${String(s).padStart(2, '0')}`;
+    };
 
     const handleEditorDidMount = (editor) => {
         editorRef.current = editor;
@@ -415,7 +498,8 @@ export default function Coder() {
                         problemId: problem._id,
                         userId: resolvedUserId,
                         code: activeCodeBuffer,
-                        language: schemaMappedLanguage
+                        language: schemaMappedLanguage,
+                        contestId: contestId || undefined
                     }),
                     credentials: 'include'
                 });
@@ -530,7 +614,37 @@ export default function Coder() {
                         </span>
                     </div>
                 </div>
-                
+
+                {contestId && (
+                    <div style={{
+                        padding: '10px 20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: contestInfo?.isOfficial === false ? 'rgba(120, 53, 15, 0.25)' : 'rgba(124, 58, 237, 0.18)',
+                        borderBottom: '1px solid rgba(167, 139, 250, 0.15)',
+                    }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: contestInfo?.isOfficial === false ? '#fbbf24' : '#c4b5fd' }}>
+                            {contestInfo == null
+                                ? 'Joining contest…'
+                                : contestInfo.isOfficial
+                                    ? '🏆 Contest attempt in progress — this counts on the leaderboard'
+                                    : '📝 Practice attempt — contest has ended, this will not affect the leaderboard'}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontFamily: 'Fira Code, monospace', fontSize: '13px', fontWeight: '700', color: remainingSeconds != null && remainingSeconds < 60 ? '#f87171' : '#f3f0ff' }}>
+                                ⏱ {formatCountdown(remainingSeconds)}
+                            </span>
+                            <button
+                                onClick={handleFinishContest}
+                                style={{ padding: '5px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#f3f0ff', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}
+                            >
+                                Finish Attempt
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <div style={{ padding: '2rem 1.5rem', overflowY: 'auto', flex: 1, lineHeight: '1.6' }}>
                     <h1 style={{ margin: '0 0 10px 0', fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em', color: '#f3f0ff' }}>{problem.name || 'Untitled Problem'}</h1>
                     {problem.description && (

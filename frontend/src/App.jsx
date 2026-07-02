@@ -7,6 +7,11 @@ import ProtectedRoute from './components/ProtectedRoute'
 import ProfilePage from "./pages/Profile/Profile";
 import AdminPanel from "./pages/Dashboard/AdminPanel";
 import VerifyEmail from './pages/Authentication/VerifyEmail'
+import ContestsList from './pages/Contests/Contestslist'
+import ContestDetail from './pages/Contests/ContestDetail'
+import ContestLeaderboard from './pages/Contests/ContestLeaderBoard'
+import ContestEvaluation from './pages/Contests/ContestEvaluation'
+import AdminContests from './pages/Contests/AdminContests'
 
 function App() {
   return (
@@ -50,6 +55,11 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route path="/contests" element={<ContestsList />} />
+          <Route path="/contests/:id" element={<ContestDetail />} />
+          <Route path="/contests/:id/leaderboard" element={<ContestLeaderboard />} />
+          <Route path="/contests/:id/evaluation" element={<ContestEvaluation />} />
+          <Route path="/contests/admin" element={<AdminContests />} />
           <Route path="*" element={<Navigate to="/auth" replace />} />
         </Routes>
       </AuthProvider>

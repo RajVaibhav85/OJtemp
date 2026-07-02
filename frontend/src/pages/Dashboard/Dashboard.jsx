@@ -139,6 +139,14 @@ export default function Dashboard() {
           )}
           
           <button 
+            style={{ ...s.logoutBtn, background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#0a0518', border: 'none', fontWeight: '600', boxShadow: '0 4px 12px 0 rgba(245, 158, 11, 0.25)' }} 
+            onClick={() => navigate('/contests')}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px 0 rgba(245, 158, 11, 0.4)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px 0 rgba(245, 158, 11, 0.25)'; }}
+          >
+            🏆 Contests
+          </button>
+          <button 
             style={{ ...s.logoutBtn, background: 'linear-gradient(135deg, #a78bfa 0%, #6366f1 100%)', color: '#0a0518', border: 'none', fontWeight: '600', boxShadow: '0 4px 12px 0 rgba(167, 139, 250, 0.25)' }} 
             onClick={() => navigate(`/${user.username}/profile`)}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px 0 rgba(167, 139, 250, 0.4)'; }}

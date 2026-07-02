@@ -39,6 +39,9 @@ app.use('/api/db', dbRoutes);
 const profileRoutes = require('./Routes/profileRoutes')
 app.use('/api/profile', profileRoutes);
 
+const contestRoutes = require('./Routes/contestRoutes');
+app.use('/api/contests', contestRoutes);
+
 // GLOBAL ERROR HANDLING MIDDLEWARE
 app.use((err, req, res, next) => {
     let statusCode = err.statusCode || 500;

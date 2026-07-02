@@ -20,4 +20,8 @@ router.get('/verify/:token', authController.verifyEmail);
 
 router.post('/resend-verification', authController.resendVerification);
 
+router.put('/change-password', protect, authController.changePassword);
+
+router.delete('/delete-account', protect, authController.deleteAccount);
+
 module.exports = router;

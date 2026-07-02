@@ -2,6 +2,7 @@ const Problem = require('../Models/Problems');
 const TestCase = require('../Models/TestCases');
 const Solution = require('../Models/Solutions');
 const Profile = require('../Models/Profile');
+const { recordContestSolve } = require('./contestController');
 
 const insertProblem = async (req, res) => {
     try {
@@ -299,7 +300,7 @@ const deleteTestCase = async (req, res) => {
 
 const submitSolution = async (req, res) => {
     try {
-        const { problemId, userId, code, language } = req.body;
+        const { problemId, userId, code, language, contestId } = req.body;
 
         if (!problemId || !userId || !code || !language) {
             return res.status(400).json({ 
@@ -310,12 +311,17 @@ const submitSolution = async (req, res) => {
 
         // Every submission is now stored as its own document (1user1problem1lang1code
         // policy removed), so we always create a fresh record instead of upserting
-        // over the previous attempt.
+        // over the previous attempt. contestId is optional — only present when
+        // this submission was made from inside a contest attempt, and is what
+        // lets updateSolutionVerdict() below route an Accepted verdict into
+        // that contest's leaderboard instead of (or in addition to) the
+        // normal profile stats.
         const solution = await Solution.create({
             user: userId,
             problem: problemId,
             language: language,
             code: code,
+            contest: contestId || null,
             verdict: 'Pending', // Reset verdict status during the compilation sequence pipeline
             submittedAt: new Date()
         });
@@ -353,6 +359,25 @@ const updateSolutionVerdict = async (req, res) => {
 
         // 2. If solution is accepted, update user profile statistics
         if (verdict === 'Accepted') {
+            // If this submission was made inside a contest attempt, record
+            // the solve there too — separately from (and in addition to)
+            // the normal profile stats below, so contest results never
+            // leak into someone's regular solved-problems history and
+            // vice versa.
+            if (updatedSolution.contest) {
+                const contestResult = await recordContestSolve({
+                    contestId: updatedSolution.contest,
+                    userId: updatedSolution.user,
+                    problemId: updatedSolution.problem,
+                    solutionId: updatedSolution._id,
+                    executionTime,
+                    memory,
+                });
+                if (!contestResult.ok) {
+                    console.warn('Contest solve not recorded:', contestResult.message);
+                }
+            }
+
             const problemData = await Problem.findById(updatedSolution.problem);
             if (problemData) {
                 const problemSlug = problemData.code; // problem slug (e.g., 'two-sum')
