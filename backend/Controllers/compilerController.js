@@ -114,8 +114,20 @@ const executeInDockerSandbox = (language, jobDir, sourceFileName) => {
         const relativeSession = path.basename(jobDir);
         const absoluteJobDir = path.join(hostCodesDir, relativeSession);
 
+        // Named per job so a stuck run can be killed by name if the exec()
+        // timeout fires. Without a name, killing the `docker run` CLI
+        // process (what Node's exec timeout actually does) does NOT stop
+        // the container itself — `docker run` is just a client talking to
+        // the daemon, and the container it started keeps running orphaned
+        // forever, ignoring --rm since --rm only fires on container exit.
+        // In practice this leaked containers for days at a time, each still
+        // burning CPU/memory on the host and starving every subsequent run
+        // (compiled languages hit hardest since they're CPU-bound).
+        const containerName = `judge-${relativeSession}`;
+
         const dockerExecutionCommand = [
             'docker run --rm',
+            `--name ${containerName}`,
             '--network none',
             '-m 256m',
             '--cpus="1.0"',
@@ -129,10 +141,24 @@ const executeInDockerSandbox = (language, jobDir, sourceFileName) => {
 
         const startTime = performance.now();
 
+        // Explicit backstop timer: force-kills the container by name at the
+        // daemon level. This is independent of (and more reliable than)
+        // exec()'s own timeout/killSignal, which only ever touches the
+        // local `docker run` CLI process, not the container.
+        const hardKillTimer = setTimeout(() => {
+            exec(`docker kill ${containerName}`, () => {
+                // Best-effort. If the container already exited naturally
+                // (race with the main exec callback below), `docker kill`
+                // will just fail harmlessly with "no such container".
+            });
+        }, 10000);
+
         exec(
             dockerExecutionCommand,
             { timeout: 10000, killSignal: 'SIGKILL' },
             (error, stdout, stderr) => {
+                clearTimeout(hardKillTimer);
+
                 const endTime = performance.now();
                 const executionTime = Math.round(endTime - startTime);
                 const memory = BASELINE_MEMORY_MB[language] ?? 15;
