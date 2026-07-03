@@ -31,6 +31,16 @@ const getDraftKey = (userId, problemCode, lang) => {
     return `oj-draft:${userId}:${problemCode}:${lang}`;
 };
 
+// Tracks which language was last active for a given user + problem, so a
+// page refresh (or any full resync) can restore the exact language the user
+// was in, instead of silently defaulting back to cpp and showing its
+// boilerplate/draft while the user's real code sits untouched under a
+// different language key.
+const getLangKey = (userId, problemCode) => {
+    if (!userId) return null;
+    return `oj-lang:${userId}:${problemCode}`;
+};
+
 // One-time cleanup of drafts saved under the old, unscoped key format
 // (`oj-draft:${problemCode}:${lang}` — only 3 colon-separated segments).
 // Those entries have no user identity attached to them, so there is no safe
@@ -170,9 +180,13 @@ export default function Coder() {
                 // Resolve which code should be sitting in the editor when the page opens.
                 // Priority:
                 //   1) A specific submission the user clicked on the Profile page (navigation state)
-                //   2) A localStorage draft (protects against accidental refresh/close)
-                //   3) The most recent submission for the active language
-                //   4) Language boilerplate
+                //   2) The language the user was last active in for this problem, restored
+                //      from localStorage — otherwise a refresh always snaps back to cpp
+                //      and shows cpp's draft/boilerplate while real work sits under
+                //      whatever language was actually active.
+                //   3) A localStorage draft for that language (protects against accidental refresh/close)
+                //   4) The most recent submission for that language
+                //   5) Language boilerplate
                 const incomingSubmission = location.state?.loadSubmission || null;
 
                 let initialLang = language;
@@ -181,6 +195,12 @@ export default function Coder() {
                 if (incomingSubmission) {
                     initialLang = languageMapping.toFrontend[incomingSubmission.language] || 'cpp';
                     initialCode = incomingSubmission.code;
+                } else {
+                    try {
+                        const langKey = getLangKey(resolvedUserId, problemCode);
+                        const savedLang = langKey ? localStorage.getItem(langKey) : null;
+                        if (savedLang && boilerplates[savedLang]) initialLang = savedLang;
+                    } catch (_) { /* localStorage unavailable, skip */ }
                 }
 
                 if (initialCode === null) {
@@ -198,6 +218,11 @@ export default function Coder() {
                 }
 
                 if (initialCode === null) initialCode = boilerplates[initialLang];
+
+                try {
+                    const langKey = getLangKey(resolvedUserId, problemCode);
+                    if (langKey) localStorage.setItem(langKey, initialLang);
+                } catch (_) { /* localStorage unavailable, skip */ }
 
                 if (isMounted) {
                     setCodeCache(prev => ({ ...prev, [initialLang]: initialCode }));
@@ -276,6 +301,10 @@ export default function Coder() {
 
         setCodeCache(prev => ({ ...prev, [newLang]: nextCode }));
         setLanguage(newLang);
+        try {
+            const langKey = getLangKey(userIdRef.current, problemCode);
+            if (langKey) localStorage.setItem(langKey, newLang);
+        } catch (_) { /* localStorage unavailable, skip */ }
         if (editorRef.current) editorRef.current.setValue(nextCode);
     };
 
@@ -301,6 +330,10 @@ export default function Coder() {
         } catch (_) { /* localStorage unavailable, skip */ }
 
         setLanguage(feLang);
+        try {
+            const langKey = getLangKey(userIdRef.current, problemCode);
+            if (langKey) localStorage.setItem(langKey, feLang);
+        } catch (_) { /* localStorage unavailable, skip */ }
         if (editorRef.current) editorRef.current.setValue(sub.code);
         setConsoleMode('custom');
     };
@@ -541,7 +574,13 @@ export default function Coder() {
     };
 
     if (fetchingData) {
-        return <div style={{ background: '#0a0518', height: '100vh', color: '#aaa3c8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontFamily: 'sans-serif' }}>Acquiring Context Profiles via Security Decoupled Handshakes...</div>;
+        return (
+            <div style={{ background: '#0a0518', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', fontFamily: 'Inter, system-ui, sans-serif' }}>
+                <div style={{ width: '32px', height: '32px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <p style={{ color: '#aaa3c8', fontSize: '14px', margin: 0 }}>Loading the problem...</p>
+            </div>
+        );
     }
 
     return (

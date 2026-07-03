@@ -369,7 +369,13 @@ export default function Profile() {
   };
 
   if (loading) {
-    return <div style={{ display: 'flex', height: '100vh', background: '#0a0518', color: '#aaa3c8', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontFamily: 'sans-serif' }}>Syncing Dev profile dashboard array metrics...</div>;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', height: '100vh', background: '#0a0518', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div style={{ width: '32px', height: '32px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <p style={{ color: '#aaa3c8', fontSize: '14px', margin: 0 }}>Loading your profile...</p>
+      </div>
+    );
   }
 
   const initials = (user?.username || '?').slice(0, 1).toUpperCase();
@@ -457,6 +463,39 @@ export default function Profile() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', background: 'rgba(12, 6, 28, 0.25)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
                     <span style={{ color: '#f87171', fontWeight: '500' }}>🔴 Hard Solved:</span> <strong style={{ color: '#fff' }}>{stats.difficultyBreakdown.hard}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={s.card}>
+              <h3 style={s.title}>Bio &amp; Links</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '11px', fontWeight: '700', color: '#8d85ab', textTransform: 'uppercase', letterSpacing: '0.05em' }}>About</h4>
+                  <p style={{ margin: 0, fontSize: '13.5px', color: '#c7bfe0', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                    {bio || <span style={{ color: '#6f6790', fontStyle: 'italic' }}>No bio yet — add one from the Edit Profile tab.</span>}
+                  </p>
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '11px', fontWeight: '700', color: '#8d85ab', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Social Links</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[
+                      { label: 'GitHub', value: github },
+                      { label: 'LinkedIn', value: linkedin },
+                      { label: 'Website', value: website }
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', background: 'rgba(12, 6, 28, 0.25)', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                        <span style={{ color: '#aaa3c8', fontWeight: '500' }}>{label}</span>
+                        {value ? (
+                          <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: '#a78bfa', textDecoration: 'none', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {value.replace(/^https?:\/\//, '')}
+                          </a>
+                        ) : (
+                          <span style={{ color: '#6f6790', fontStyle: 'italic' }}>Not set</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -623,7 +662,11 @@ export default function Profile() {
           <div style={{ ...s.card, maxWidth: '860px', margin: '0 auto' }}>
             <h3 style={s.title}>Submission History</h3>
             {loadingSubmissions ? (
-              <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>Loading submissions...</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
+                <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <span style={{ color: '#6f6790', fontSize: '13px' }}>Loading submissions...</span>
+              </div>
             ) : submissions.length === 0 ? (
               <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>No submissions yet. Once you submit a solution, every attempt will show up here.</span>
             ) : (

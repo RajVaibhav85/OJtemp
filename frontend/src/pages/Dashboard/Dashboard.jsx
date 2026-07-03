@@ -114,8 +114,10 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0a0518', color: '#aaa3c8', fontSize: '14px', fontFamily: 'sans-serif' }}>
-        Loading Auth Profile...
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', minHeight: '100vh', background: '#0a0518', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div style={{ width: '32px', height: '32px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <p style={{ color: '#aaa3c8', fontSize: '14px', margin: 0 }}>Checking your login...</p>
       </div>
     )
   }
@@ -238,7 +240,11 @@ export default function Dashboard() {
           <div style={{ ...s.cardTitle, margin: 0, padding: '1.5rem 1.5rem 0.75rem 1.5rem' }}>⚡ Challenges ({problems.length})</div>
           <div>
             {isFetching ? (
-              <p style={{ padding: '32px', color: '#aaa3c8', fontSize: '14px', textAlign: 'center' }}>Loading problem matches...</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 20px' }}>
+                <div style={{ width: '24px', height: '24px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <p style={{ color: '#aaa3c8', fontSize: '14px', margin: 0 }}>Finding problems for you...</p>
+              </div>
             ) : problems.length === 0 ? (
               <p style={{ padding: '32px', color: '#aaa3c8', fontSize: '14px', textAlign: 'center' }}>No problems match criteria.</p>
             ) : (

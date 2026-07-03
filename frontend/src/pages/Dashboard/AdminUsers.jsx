@@ -257,8 +257,10 @@ export default function AdminUsers() {
 
   if (loading || !user || user.role !== 'admin') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0a0518', color: '#aaa3c8', fontSize: '14px', fontFamily: 'sans-serif' }}>
-        Verifying secure administrative privileges...
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', minHeight: '100vh', background: '#0a0518', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div style={{ width: '32px', height: '32px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <p style={{ color: '#aaa3c8', fontSize: '14px', margin: 0 }}>Checking admin access...</p>
       </div>
     )
   }
@@ -321,7 +323,11 @@ export default function AdminUsers() {
           </div>
 
           {fetchingUsers ? (
-            <p style={{ fontSize: '13px', color: '#8d85ab', padding: '24px 0', textAlign: 'center' }}>Loading users...</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
+              <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <p style={{ fontSize: '13px', color: '#8d85ab', margin: 0 }}>Getting the user list...</p>
+            </div>
           ) : filteredUsers.length === 0 ? (
             <p style={{ fontSize: '13px', color: '#8d85ab', padding: '24px 0', textAlign: 'center', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px' }}>
               No users match this filter.
@@ -379,7 +385,11 @@ export default function AdminUsers() {
         <div style={s.card}>
           <p style={s.cardTitle}>📊 Recent Activity {activity.length > 0 ? `(${activity.length})` : ''}</p>
           {fetchingActivity ? (
-            <p style={{ fontSize: '13px', color: '#8d85ab', padding: '24px 0', textAlign: 'center' }}>Loading activity...</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
+              <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <p style={{ fontSize: '13px', color: '#8d85ab', margin: 0 }}>Fetching recent activity...</p>
+            </div>
           ) : activity.length === 0 ? (
             <p style={{ fontSize: '13px', color: '#8d85ab', padding: '24px 0', textAlign: 'center', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px' }}>
               No recent submissions to show yet.
