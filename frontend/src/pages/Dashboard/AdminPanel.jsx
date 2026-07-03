@@ -307,6 +307,14 @@ export default function AdminPanel() {
         </p>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
+            style={{ ...s.btnSecondary, background: 'rgba(167, 139, 250, 0.1)', borderColor: 'rgba(167, 139, 250, 0.25)', color: '#c4b5fd' }}
+            onClick={() => navigate(`/${user.username}/admin/users`)}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.18)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.1)'; }}
+          >
+            👥 User Activity & Access
+          </button>
+          <button
             style={{ ...s.btnSecondary, background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.25)', color: '#fbbf24' }}
             onClick={() => navigate('/contests/admin')}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245, 158, 11, 0.18)'; }}

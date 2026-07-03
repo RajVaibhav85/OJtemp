@@ -42,6 +42,9 @@ app.use('/api/profile', profileRoutes);
 const contestRoutes = require('./Routes/contestRoutes');
 app.use('/api/contests', contestRoutes);
 
+const adminRoutes = require('./Routes/adminRoutes');
+app.use('/api/admin', adminRoutes);
+
 // GLOBAL ERROR HANDLING MIDDLEWARE
 app.use((err, req, res, next) => {
     let statusCode = err.statusCode || 500;
