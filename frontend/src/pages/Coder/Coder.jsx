@@ -585,8 +585,42 @@ export default function Coder() {
     };
 
     if (fetchingData) {
-        return <div style={{ background: '#0a0518', height: '100vh', color: '#aaa3c8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontFamily: 'sans-serif' }}>Acquiring Context Profiles via Security Decoupled Handshakes...</div>;
-    }
+    return (
+        <div style={{ 
+            background: '#0a0518', 
+            height: '100vh', 
+            color: '#aaa3c8', 
+            display: 'flex', 
+            flexDirection: 'column', // Stacks the spinner and text vertically
+            gap: '16px',             // Adds clean spacing between spinner and text
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            fontSize: '14px', 
+            fontFamily: 'sans-serif' 
+        }}>
+            {/* Injecting a standard CSS keyframe animation for the spin */}
+            <style>{`
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `}</style>
+            
+            {/* Circular Progress Bar */}
+            <div style={{
+                width: '36px',
+                height: '36px',
+                border: '3px solid rgba(170, 163, 200, 0.15)', // Muted background ring
+                borderTop: '3px solid #aaa3c8',                // Active spinning accent
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite'
+            }} />
+            
+            {/* Loading Text */}
+            <div style={{ letterSpacing: '0.5px' }}>loading Problem</div>
+        </div>
+    );
+}
 
     return (
         <div ref={containerRef} style={{ display: 'flex', height: '100vh', background: '#0a0518', color: '#f3f0ff', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden' }}>
