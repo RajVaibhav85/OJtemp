@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
@@ -7,6 +7,7 @@ const COMPILER_API = `${BACKEND_URL}/api/compiler`;
 const DB_API = `${BACKEND_URL}/api/db`;
 const AI_API = `${BACKEND_URL}/api/ai`;
 const AUTH_API = `${BACKEND_URL}/api/auth`;
+const CONTEST_API = `${BACKEND_URL}/api/contests`;
 
 const boilerplates = {
     cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    int number;\n    // Read input\n    cin >> number;\n    // Write output\n    cout << "You entered: " << number << endl;\n    return 0;\n}`,
@@ -21,48 +22,22 @@ const languageMapping = {
 };
 
 // Key used to auto-save whatever is currently in the editor so an accidental
-// refresh (or tab close) never loses unsaved work. Scoped per USER + problem + language,
-// so two different accounts on the same browser never see each other's drafts.
-// NOTE: userId is required. If it's missing we return null and callers must skip
-// reading/writing localStorage entirely — silently falling back to an unscoped key
-// is exactly what caused the "other user's code" bug.
-const getDraftKey = (userId, problemCode, lang) => {
-    if (!userId) return null;
-    return `oj-draft:${userId}:${problemCode}:${lang}`;
-};
-
-// Tracks which language was last active for a given user + problem, so a
-// page refresh (or any full resync) can restore the exact language the user
-// was in, instead of silently defaulting back to cpp and showing its
-// boilerplate/draft while the user's real code sits untouched under a
-// different language key.
-const getLangKey = (userId, problemCode) => {
-    if (!userId) return null;
-    return `oj-lang:${userId}:${problemCode}`;
-};
-
-// One-time cleanup of drafts saved under the old, unscoped key format
-// (`oj-draft:${problemCode}:${lang}` — only 3 colon-separated segments).
-// Those entries have no user identity attached to them, so there is no safe
-// way to attribute them to the current user; they must be purged rather than
-// migrated, otherwise whoever loads the page next inherits a stranger's code.
-const purgeLegacyUnscopedDrafts = () => {
-    try {
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('oj-draft:') && key.split(':').length === 3) {
-                keysToRemove.push(key);
-            }
-        }
-        keysToRemove.forEach(k => localStorage.removeItem(k));
-    } catch (_) { /* localStorage unavailable, skip */ }
-};
+// refresh (or tab close) never loses unsaved work. Scoped per problem + language.
+const getDraftKey = (problemCode, lang) => `oj-draft:${problemCode}:${lang}`;
 
 export default function Coder() {
     const { code: problemCode } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
+    const [searchParams] = useSearchParams();
+
+    // Contest mode: present only when this page was opened from a contest
+    // attempt (?contestId=...). Everything below is a no-op when it's absent,
+    // so the normal practice-mode workflow is completely unaffected.
+    const contestId = searchParams.get('contestId');
+    const [contestInfo, setContestInfo] = useState(null); // { endTime, isOfficial, title }
+    const [remainingSeconds, setRemainingSeconds] = useState(null);
+    const contestFinishedRef = useRef(false);
 
     const containerRef = useRef(null);
     const rightPanelRef = useRef(null);
@@ -70,10 +45,6 @@ export default function Coder() {
     const draftSaveTimeoutRef = useRef(null);
 
     const [userContext, setUserContext] = useState(null);
-    // Kept in a ref (in addition to state) purely so the debounced draft-save
-    // callback and other closures always read the *current* user, never a
-    // stale one captured from a previous render/session.
-    const userIdRef = useRef(null);
     const [problem, setProblem] = useState(null);
     const [testCases, setTestCases] = useState([]);
     const [fetchingData, setFetchingData] = useState(true);
@@ -129,11 +100,6 @@ export default function Coder() {
                 }
 
                 const resolvedUserId = currentUserProfile._id || currentUserProfile.id;
-                userIdRef.current = resolvedUserId;
-
-                // Purge any drafts left over from the old unscoped key format. This
-                // guarantees no stale, user-less draft can ever be read below.
-                purgeLegacyUnscopedDrafts();
 
                 const probRes = await fetch(`${DB_API}/get-problem/${problemCode}`);
                 if (!probRes.ok) throw new Error('Target matrix unreachable.');
@@ -180,13 +146,9 @@ export default function Coder() {
                 // Resolve which code should be sitting in the editor when the page opens.
                 // Priority:
                 //   1) A specific submission the user clicked on the Profile page (navigation state)
-                //   2) The language the user was last active in for this problem, restored
-                //      from localStorage — otherwise a refresh always snaps back to cpp
-                //      and shows cpp's draft/boilerplate while real work sits under
-                //      whatever language was actually active.
-                //   3) A localStorage draft for that language (protects against accidental refresh/close)
-                //   4) The most recent submission for that language
-                //   5) Language boilerplate
+                //   2) A localStorage draft (protects against accidental refresh/close)
+                //   3) The most recent submission for the active language
+                //   4) Language boilerplate
                 const incomingSubmission = location.state?.loadSubmission || null;
 
                 let initialLang = language;
@@ -195,18 +157,11 @@ export default function Coder() {
                 if (incomingSubmission) {
                     initialLang = languageMapping.toFrontend[incomingSubmission.language] || 'cpp';
                     initialCode = incomingSubmission.code;
-                } else {
-                    try {
-                        const langKey = getLangKey(resolvedUserId, problemCode);
-                        const savedLang = langKey ? localStorage.getItem(langKey) : null;
-                        if (savedLang && boilerplates[savedLang]) initialLang = savedLang;
-                    } catch (_) { /* localStorage unavailable, skip */ }
                 }
 
                 if (initialCode === null) {
                     try {
-                        const draftKey = getDraftKey(resolvedUserId, problemCode, initialLang);
-                        const draft = draftKey ? localStorage.getItem(draftKey) : null;
+                        const draft = localStorage.getItem(getDraftKey(problemCode, initialLang));
                         if (draft) initialCode = draft;
                     } catch (_) { /* localStorage unavailable, skip */ }
                 }
@@ -218,11 +173,6 @@ export default function Coder() {
                 }
 
                 if (initialCode === null) initialCode = boilerplates[initialLang];
-
-                try {
-                    const langKey = getLangKey(resolvedUserId, problemCode);
-                    if (langKey) localStorage.setItem(langKey, initialLang);
-                } catch (_) { /* localStorage unavailable, skip */ }
 
                 if (isMounted) {
                     setCodeCache(prev => ({ ...prev, [initialLang]: initialCode }));
@@ -246,6 +196,79 @@ export default function Coder() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [problemCode, navigate, location.key]);
 
+    // Contest mode: join (or resume) the attempt as soon as we know who the
+    // user is. join is idempotent server-side — resuming an in-progress
+    // attempt just returns its existing endTime/isOfficial, it never resets
+    // the clock.
+    useEffect(() => {
+        if (!contestId || !userContext) return;
+        let cancelled = false;
+        const resolvedUserId = userContext._id || userContext.id;
+
+        fetch(`${CONTEST_API}/${contestId}/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: resolvedUserId }),
+            credentials: 'include'
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (cancelled || !data.success) return;
+                setContestInfo({
+                    endTime: data.data.contestEndTime,
+                    isOfficial: data.data.attempt.isOfficial,
+                });
+            })
+            .catch(() => { /* contest banner just won't show; problem still solvable normally */ });
+
+        return () => { cancelled = true; };
+    }, [contestId, userContext]);
+
+    // Ticks the countdown and auto-finishes the attempt the moment time runs
+    // out, so a user who walks away mid-contest still gets scored on
+    // whatever they'd solved rather than being left in limbo.
+    useEffect(() => {
+        if (!contestInfo?.endTime) return;
+
+        const tick = () => {
+            const secondsLeft = Math.max(0, Math.round((new Date(contestInfo.endTime).getTime() - Date.now()) / 1000));
+            setRemainingSeconds(secondsLeft);
+            if (secondsLeft === 0 && !contestFinishedRef.current) {
+                contestFinishedRef.current = true;
+                handleFinishContest();
+            }
+        };
+
+        tick();
+        const intervalId = setInterval(tick, 1000);
+        return () => clearInterval(intervalId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [contestInfo]);
+
+    const handleFinishContest = async () => {
+        if (!contestId || !userContext) return;
+        const resolvedUserId = userContext._id || userContext.id;
+        try {
+            await fetch(`${CONTEST_API}/${contestId}/finish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: resolvedUserId }),
+                credentials: 'include'
+            });
+        } catch (_) { /* best-effort — evaluation page will still compute from whatever was recorded */ }
+        navigate(`/contests/${contestId}/evaluation`);
+    };
+
+    const formatCountdown = (secs) => {
+        if (secs == null) return '--:--';
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        return h > 0
+            ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+            : `${m}:${String(s).padStart(2, '0')}`;
+    };
+
     const handleEditorDidMount = (editor) => {
         editorRef.current = editor;
         editor.setValue(codeCache[language]);
@@ -257,8 +280,7 @@ export default function Coder() {
         if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         draftSaveTimeoutRef.current = setTimeout(() => {
             try {
-                const draftKey = getDraftKey(userIdRef.current, problemCode, language);
-                if (draftKey) localStorage.setItem(draftKey, value ?? '');
+                localStorage.setItem(getDraftKey(problemCode, language), value ?? '');
             } catch (_) { /* localStorage unavailable, skip */ }
         }, 400);
     };
@@ -273,8 +295,7 @@ export default function Coder() {
     // this session: draft > most recent submission for that language > boilerplate.
     const resolveCodeForLanguage = (lang) => {
         try {
-            const draftKey = getDraftKey(userIdRef.current, problemCode, lang);
-            const draft = draftKey ? localStorage.getItem(draftKey) : null;
+            const draft = localStorage.getItem(getDraftKey(problemCode, lang));
             if (draft) return draft;
         } catch (_) { /* localStorage unavailable, skip */ }
 
@@ -290,8 +311,7 @@ export default function Coder() {
             const codeToPreserve = editorRef.current.getValue();
             setCodeCache(prev => ({ ...prev, [language]: codeToPreserve }));
             try {
-                const draftKey = getDraftKey(userIdRef.current, problemCode, language);
-                if (draftKey) localStorage.setItem(draftKey, codeToPreserve);
+                localStorage.setItem(getDraftKey(problemCode, language), codeToPreserve);
             } catch (_) { /* localStorage unavailable, skip */ }
         }
 
@@ -301,10 +321,6 @@ export default function Coder() {
 
         setCodeCache(prev => ({ ...prev, [newLang]: nextCode }));
         setLanguage(newLang);
-        try {
-            const langKey = getLangKey(userIdRef.current, problemCode);
-            if (langKey) localStorage.setItem(langKey, newLang);
-        } catch (_) { /* localStorage unavailable, skip */ }
         if (editorRef.current) editorRef.current.setValue(nextCode);
     };
 
@@ -318,22 +334,16 @@ export default function Coder() {
             const currentCode = editorRef.current.getValue();
             setCodeCache(prev => ({ ...prev, [language]: currentCode }));
             try {
-                const draftKey = getDraftKey(userIdRef.current, problemCode, language);
-                if (draftKey) localStorage.setItem(draftKey, currentCode);
+                localStorage.setItem(getDraftKey(problemCode, language), currentCode);
             } catch (_) { /* localStorage unavailable, skip */ }
         }
 
         setCodeCache(prev => ({ ...prev, [feLang]: sub.code }));
         try {
-            const feDraftKey = getDraftKey(userIdRef.current, problemCode, feLang);
-            if (feDraftKey) localStorage.setItem(feDraftKey, sub.code);
+            localStorage.setItem(getDraftKey(problemCode, feLang), sub.code);
         } catch (_) { /* localStorage unavailable, skip */ }
 
         setLanguage(feLang);
-        try {
-            const langKey = getLangKey(userIdRef.current, problemCode);
-            if (langKey) localStorage.setItem(langKey, feLang);
-        } catch (_) { /* localStorage unavailable, skip */ }
         if (editorRef.current) editorRef.current.setValue(sub.code);
         setConsoleMode('custom');
     };
@@ -488,7 +498,8 @@ export default function Coder() {
                         problemId: problem._id,
                         userId: resolvedUserId,
                         code: activeCodeBuffer,
-                        language: schemaMappedLanguage
+                        language: schemaMappedLanguage,
+                        contestId: contestId || undefined
                     }),
                     credentials: 'include'
                 });
@@ -574,13 +585,7 @@ export default function Coder() {
     };
 
     if (fetchingData) {
-        return (
-            <div style={{ background: '#0a0518', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', fontFamily: 'Inter, system-ui, sans-serif' }}>
-                <div style={{ width: '32px', height: '32px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                <p style={{ color: '#aaa3c8', fontSize: '14px', margin: 0 }}>Loading the problem...</p>
-            </div>
-        );
+        return <div style={{ background: '#0a0518', height: '100vh', color: '#aaa3c8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontFamily: 'sans-serif' }}>Acquiring Context Profiles via Security Decoupled Handshakes...</div>;
     }
 
     return (
@@ -609,7 +614,37 @@ export default function Coder() {
                         </span>
                     </div>
                 </div>
-                
+
+                {contestId && (
+                    <div style={{
+                        padding: '10px 20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: contestInfo?.isOfficial === false ? 'rgba(120, 53, 15, 0.25)' : 'rgba(124, 58, 237, 0.18)',
+                        borderBottom: '1px solid rgba(167, 139, 250, 0.15)',
+                    }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: contestInfo?.isOfficial === false ? '#fbbf24' : '#c4b5fd' }}>
+                            {contestInfo == null
+                                ? 'Joining contest…'
+                                : contestInfo.isOfficial
+                                    ? '🏆 Contest attempt in progress — this counts on the leaderboard'
+                                    : '📝 Practice attempt — contest has ended, this will not affect the leaderboard'}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontFamily: 'Fira Code, monospace', fontSize: '13px', fontWeight: '700', color: remainingSeconds != null && remainingSeconds < 60 ? '#f87171' : '#f3f0ff' }}>
+                                ⏱ {formatCountdown(remainingSeconds)}
+                            </span>
+                            <button
+                                onClick={handleFinishContest}
+                                style={{ padding: '5px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#f3f0ff', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}
+                            >
+                                GO TO Evaluation
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <div style={{ padding: '2rem 1.5rem', overflowY: 'auto', flex: 1, lineHeight: '1.6' }}>
                     <h1 style={{ margin: '0 0 10px 0', fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em', color: '#f3f0ff' }}>{problem.name || 'Untitled Problem'}</h1>
                     {problem.description && (
