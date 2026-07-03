@@ -55,6 +55,35 @@ const BASELINE_MEMORY_MB = {
     java: 38,
 };
 
+// ─── Image warm-up ─────────────────────────────────────────────────────────
+//
+// `docker run` pulls an image transparently on a cache miss before it starts
+// the container. That pull happens INSIDE the same 10s window we time as
+// "execution", so the first run of any language after a fresh host/DinD
+// daemon (redeploy, EC2 reboot, disk-pressure image eviction, etc.) can get
+// killed and reported as a false "Time Limit Exceeded" purely from network
+// pull time, before a single line of the user's code has run.
+//
+// Pulling every configured image once at startup means the 10s execution
+// timeout only ever measures real compile+run time from then on.
+const warmUpDockerImages = () => {
+    const images = [...new Set(Object.values(LANGUAGE_CONFIG).map(c => c.dockerImage))];
+    images.forEach(image => {
+        console.log(`[compiler] Pulling ${image} to warm the local Docker cache...`);
+        exec(`docker pull ${image}`, { timeout: 5 * 60 * 1000 }, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`[compiler] Failed to pre-pull ${image} — the first run using it may be slow or falsely TLE. ${stderr?.trim() || error.message}`);
+            } else {
+                console.log(`[compiler] ${image} ready.`);
+            }
+        });
+    });
+};
+// Fire on module load (server startup). Runs in the background — the server
+// doesn't wait on it, but subsequent code runs will hit a warm cache almost
+// as soon as it finishes rather than staying cold indefinitely.
+warmUpDockerImages();
+
 // ─── Docker Sandbox Executor ──────────────────────────────────────────────────
 
 /**
@@ -114,12 +143,14 @@ const executeInDockerSandbox = (language, jobDir, sourceFileName) => {
                             msg: 'Time Limit Exceeded (TLE): execution exceeded the 10s safety quota.',
                             executionTime,
                             memory,
+                            verdict: 'Time Limit Exceeded',
                         });
                     } else {
                         reject({
                             msg: stderr?.trim() || error.message,
                             executionTime,
                             memory,
+                            verdict: 'Runtime Error',
                         });
                     }
                 } else {
@@ -134,6 +165,10 @@ const executeInDockerSandbox = (language, jobDir, sourceFileName) => {
 const runCode = async (req, res) => {
     const { language, code, input = '' } = req.body;
 
+    // These two checks are true client-input problems (never sent to Docker
+    // at all). Execution-time failures (TLE, compile/runtime error) also
+    // return 400 below, to match what the frontend currently expects — see
+    // the comment in the catch block.
     if (!LANGUAGE_CONFIG[language]) {
         return res.status(400).json({
             success: false,
@@ -173,9 +208,15 @@ const runCode = async (req, res) => {
         const errorMessage =
             err.msg || (typeof err === 'string' ? err : err.message || 'Unknown error during execution.');
 
+        // Kept at 400 to match what Coder.jsx already expects (it branches
+        // on response.ok / HTTP status, not a body field, for both the
+        // "Run" button and per-testcase evaluation). `verdict` is additive —
+        // safe for the frontend to start reading later without a breaking
+        // change now.
         return res.status(400).json({
             success: false,
             error: errorMessage,
+            verdict: err.verdict || 'Runtime Error',
             executionTime: err.executionTime ?? 0,
             memory: err.memory ?? 0,
         });
