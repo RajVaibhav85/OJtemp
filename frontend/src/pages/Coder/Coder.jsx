@@ -25,6 +25,19 @@ const languageMapping = {
 // refresh (or tab close) never loses unsaved work. Scoped per problem + language.
 const getDraftKey = (problemCode, lang) => `oj-draft:${problemCode}:${lang}`;
 
+// Distinct badge styling per failure type, so "Wrong Answer" no longer looks
+// identical to a "Runtime Error" or a "Compilation Error" in the results list.
+const FAILURE_BADGE_STYLES = {
+    'Wrong Answer': { bg: 'rgba(248, 113, 113, 0.15)', border: 'rgba(248, 113, 113, 0.4)', color: '#f87171' },
+    'Runtime Error': { bg: 'rgba(251, 146, 60, 0.15)', border: 'rgba(251, 146, 60, 0.4)', color: '#fb923c' },
+    'Time Limit Exceeded': { bg: 'rgba(251, 191, 36, 0.15)', border: 'rgba(251, 191, 36, 0.4)', color: '#fbbf24' },
+    'Compilation Error': { bg: 'rgba(167, 139, 250, 0.15)', border: 'rgba(167, 139, 250, 0.4)', color: '#a78bfa' },
+    'Memory Limit Exceeded': { bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.4)', color: '#38bdf8' },
+};
+const getFailureBadge = (failureType) =>
+    FAILURE_BADGE_STYLES[failureType] || { bg: 'rgba(248, 113, 113, 0.15)', border: 'rgba(248, 113, 113, 0.4)', color: '#f87171' };
+const PASSED_BADGE = { bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(52, 211, 153, 0.4)', color: '#34d399' };
+
 export default function Coder() {
     const { code: problemCode } = useParams();
     const navigate = useNavigate();
@@ -90,10 +103,29 @@ export default function Coder() {
             try {
                 let currentUserProfile = userContext;
                 if (!currentUserProfile) {
-                    const profileRes = await fetch(`${AUTH_API}/me`, {
+                    let profileRes = await fetch(`${AUTH_API}/me`, {
                         method: 'GET',
                         credentials: 'include'
                     });
+
+                    // Access token may have simply expired (short-lived by design).
+                    // Before treating this as a real auth failure, silently try to
+                    // refresh it — same flow AuthContext runs on initial app load —
+                    // and retry /me once. Only fall through to the catch block (and
+                    // the resulting redirect) if the refresh token is also invalid.
+                    if (profileRes.status === 401) {
+                        const refreshRes = await fetch(`${AUTH_API}/refresh`, {
+                            method: 'POST',
+                            credentials: 'include'
+                        });
+                        if (refreshRes.ok) {
+                            profileRes = await fetch(`${AUTH_API}/me`, {
+                                method: 'GET',
+                                credentials: 'include'
+                            });
+                        }
+                    }
+
                     if (!profileRes.ok) throw new Error('User session context unauthorized.');
                     currentUserProfile = await profileRes.json();
                     if (isMounted) setUserContext(currentUserProfile);
@@ -458,17 +490,40 @@ export default function Coder() {
 
                     const matched = response.ok && (tc.output.trim() === (data.output || '').trim());
 
+                    // Classify *why* a test failed. `data.verdict` comes straight from the
+                    // backend's Docker sandbox ('Time Limit Exceeded' | 'Compilation Error' |
+                    // 'Runtime Error') for non-2xx responses; a 2xx response with a mismatched
+                    // output is always a Wrong Answer. This failureType (not raw stdout/stderr)
+                    // is what's safe to show even on hidden tests.
+                    const failureType = matched
+                        ? null
+                        : (!response.ok ? (data.verdict || 'Runtime Error') : 'Wrong Answer');
+
                     return {
                         id: tc._id || idx,
                         input: tc.input,
                         expectedOutput: tc.output,
-                        actualOutput: data.output || data.error || 'Blank Return Matrix',
+                        actualOutput: data.output || '',
+                        // Compile/crash message — always safe to reveal, since it describes
+                        // how the submitted code as a whole failed, not the hidden test data.
+                        errorMessage: !response.ok ? (data.error || 'Execution failed.') : null,
                         isHidden: tc.isHidden,
                         passed: matched,
-                        diagnostics: response.ok ? `Success (${data.executionTime}ms)` : 'Fault'
+                        failureType,
+                        diagnostics: response.ok ? `Success (${data.executionTime}ms)` : (data.verdict || 'Fault')
                     };
                 } catch {
-                    return { id: tc._id || idx, input: tc.input, expectedOutput: tc.output, actualOutput: 'Transport connection failure loops.', isHidden: tc.isHidden, passed: false, diagnostics: 'Disconnected' };
+                    return {
+                        id: tc._id || idx,
+                        input: tc.input,
+                        expectedOutput: tc.output,
+                        actualOutput: '',
+                        errorMessage: 'Transport connection failure loops.',
+                        isHidden: tc.isHidden,
+                        passed: false,
+                        failureType: 'Runtime Error',
+                        diagnostics: 'Disconnected'
+                    };
                 }
             });
 
@@ -786,21 +841,35 @@ export default function Coder() {
                                 )}
                                 {executionResults && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        {executionResults.map((res, i) => (
-                                            <div key={res.id} style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${res.passed ? 'rgba(52, 211, 153, 0.2)' : 'rgba(248, 113, 113, 0.2)'}`, borderRadius: '10px', padding: '14px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
-                                                    <span style={{ fontWeight: '600', color: res.passed ? '#34d399' : '#f87171' }}>Assertion Step #{i + 1} ({res.passed ? 'PASSED' : 'FAILED'})</span>
-                                                    <span style={{ fontSize: '11px', color: '#8d85ab', fontFamily: 'monospace' }}>{res.diagnostics}</span>
-                                                </div>
-                                                {!res.isHidden && (
-                                                    <div className="cod-tc-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '12.5px', fontFamily: 'Fira Code, monospace', background: 'rgba(3, 7, 18, 0.3)', padding: '10px', borderRadius: '6px', marginTop: '6px', color: '#cbd5e1' }}>
-                                                        <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Input Stream:</span> <pre style={{ margin: '4px 0 0 0', color: '#f3f0ff' }}>{res.input}</pre></div>
-                                                        <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Expected Configuration:</span> <pre style={{ margin: '4px 0 0 0', color: '#34d399' }}>{res.expectedOutput}</pre></div>
-                                                        <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Actual Outcome:</span> <pre style={{ margin: '4px 0 0 0', color: res.passed ? '#34d399' : '#f87171' }}>{res.actualOutput}</pre></div>
+                                        {executionResults.map((res, i) => {
+                                            const badge = res.passed ? PASSED_BADGE : getFailureBadge(res.failureType);
+                                            const badgeLabel = res.passed ? 'Passed' : (res.failureType || 'Failed');
+                                            return (
+                                                <div key={res.id} style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${badge.border}`, borderRadius: '10px', padding: '14px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', marginBottom: '8px', gap: '10px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            <span style={{ fontWeight: '600', color: '#dcd6f0' }}>Assertion Step #{i + 1}</span>
+                                                            <span style={{ padding: '3px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: '700', background: badge.bg, border: `1px solid ${badge.border}`, color: badge.color, whiteSpace: 'nowrap' }}>{badgeLabel}</span>
+                                                        </div>
+                                                        {res.passed && (
+                                                            <span style={{ fontSize: '11px', color: '#8d85ab', fontFamily: 'monospace' }}>{res.diagnostics}</span>
+                                                        )}
                                                     </div>
-                                                )}
-                                            </div>
-                                        ))}
+                                                    {/* Compile/crash message: shown for every failing test, hidden or not —
+                                                        it describes how the code as a whole broke, not the hidden test data itself. */}
+                                                    {!res.passed && res.errorMessage && (
+                                                        <pre style={{ margin: '0 0 6px 0', padding: '10px 12px', borderRadius: '6px', background: 'rgba(3, 7, 18, 0.4)', border: `1px solid ${badge.border}`, color: badge.color, fontSize: '12px', fontFamily: 'Fira Code, monospace', whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{res.errorMessage}</pre>
+                                                    )}
+                                                    {!res.isHidden && (
+                                                        <div className="cod-tc-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '12.5px', fontFamily: 'Fira Code, monospace', background: 'rgba(3, 7, 18, 0.3)', padding: '10px', borderRadius: '6px', marginTop: '6px', color: '#cbd5e1' }}>
+                                                            <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Input Stream:</span> <pre style={{ margin: '4px 0 0 0', color: '#f3f0ff' }}>{res.input}</pre></div>
+                                                            <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Expected Configuration:</span> <pre style={{ margin: '4px 0 0 0', color: '#34d399' }}>{res.expectedOutput}</pre></div>
+                                                            <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Actual Outcome:</span> <pre style={{ margin: '4px 0 0 0', color: res.passed ? '#34d399' : '#f87171' }}>{res.actualOutput}</pre></div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

@@ -28,23 +28,40 @@ const LANGUAGE_CONFIG = {
     cpp: {
         dockerImage: 'frolvlad/alpine-gxx:latest',
         sourceFileName: 'code.cpp',
-        runCommand: 'g++ /workspace/code.cpp -o /tmp/a.out && /tmp/a.out < /workspace/input.txt',
+        // Compiled language: g++ runs as a distinct phase before the binary
+        // executes, so a failure here is a Compilation Error, not a Runtime
+        // Error. IMPORTANT: this string is nested two shells deep — Node's
+        // exec() runs it through the HOST shell first (as the argument to
+        // `sh -c "..."`), and only what survives THAT gets handed to the
+        // container's inner shell. Double quotes don't protect `$`, so
+        // anything like `$?` here would get expanded by the host shell
+        // (to ~always 0) before Docker ever sees it. Using `||` + a `{ }`
+        // group instead of `$?` avoids needing `$` at all, so there's
+        // nothing for the host shell to prematurely expand.
+        hasCompileStep: true,
+        runCommand: 'g++ /workspace/code.cpp -o /tmp/a.out 2>/tmp/ce.log || { cat /tmp/ce.log >&2; exit 111; }; /tmp/a.out < /workspace/input.txt',
     },
     python: {
         dockerImage: 'python:3.11-alpine',
         sourceFileName: 'code.py',
+        // Interpreted: no separate compile phase, so a SyntaxError surfaces
+        // the same way any other crash does — as a Runtime Error. This
+        // matches how most judges (e.g. Codeforces) treat interpreted langs.
+        hasCompileStep: false,
         runCommand: 'python /workspace/code.py < /workspace/input.txt',
     },
     javascript: {
         dockerImage: 'node:20-alpine',
         sourceFileName: 'code.js',
+        hasCompileStep: false,
         runCommand: 'node /workspace/code.js < /workspace/input.txt',
     },
     java: {
         dockerImage: 'eclipse-temurin:17-alpine',
         sourceFileName: 'Main.java',
         // javac outputs to /tmp, java runs from /tmp with class name Main
-        runCommand: 'javac -d /tmp /workspace/Main.java && java -cp /tmp Main < /workspace/input.txt',
+        hasCompileStep: true,
+        runCommand: 'javac -d /tmp /workspace/Main.java 2>/tmp/ce.log || { cat /tmp/ce.log >&2; exit 111; }; java -cp /tmp Main < /workspace/input.txt',
     },
 };
 
@@ -171,9 +188,43 @@ const executeInDockerSandbox = (language, jobDir, sourceFileName) => {
                             memory,
                             verdict: 'Time Limit Exceeded',
                         });
+                    } else if (config.hasCompileStep && error.code === 111) {
+                        reject({
+                            msg: stderr?.trim() || 'Compilation failed.',
+                            executionTime,
+                            memory,
+                            verdict: 'Compilation Error',
+                        });
+                    } else if (error.code === 137) {
+                        // 137 = 128 + SIGKILL(9). The container's cgroup OOM killer sends
+                        // this when the process crosses the -m 256m memory cap — e.g.
+                        // unbounded allocation, a container growing forever, etc. The
+                        // kernel doesn't leave anything useful in stderr for this, so
+                        // stderr is almost always empty; supply a real explanation instead.
+                        reject({
+                            msg: stderr?.trim() || 'Memory Limit Exceeded: the process was killed after exceeding the 256MB memory cap.',
+                            executionTime,
+                            memory,
+                            verdict: 'Memory Limit Exceeded',
+                        });
+                    } else if (error.code === 139) {
+                        // 139 = 128 + SIGSEGV(11). Invalid memory access — most commonly
+                        // a stack overflow from unbounded/infinite recursion, but can also
+                        // be an out-of-bounds array/pointer access. Also usually silent
+                        // on stderr, so give a concrete, actionable fallback message.
+                        reject({
+                            msg: stderr?.trim() || 'Segmentation fault: invalid memory access, often caused by a stack overflow (e.g. unterminated recursion) or an out-of-bounds array/pointer access.',
+                            executionTime,
+                            memory,
+                            verdict: 'Runtime Error',
+                        });
                     } else {
                         reject({
-                            msg: stderr?.trim() || error.message,
+                            // NOTE: error.message here is Node's own "Command failed: <full
+                            // docker invocation>" text — it includes the host filesystem path
+                            // to the job directory. Never show that to the end user; fall back
+                            // to a generic message instead of leaking internal infrastructure.
+                            msg: stderr?.trim() || 'The program crashed during execution.',
                             executionTime,
                             memory,
                             verdict: 'Runtime Error',
