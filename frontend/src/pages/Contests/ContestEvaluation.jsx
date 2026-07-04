@@ -122,8 +122,12 @@ export default function ContestEvaluation() {
                   <div style={s.statLabel}>Time Taken</div>
                 </div>
                 <div style={s.stat}>
-                  <div style={s.statValue}>{evaluation.finishedAt ? '✅' : '⏳'}</div>
-                  <div style={s.statLabel}>{evaluation.finishedAt ? 'Finished' : 'In Progress'}</div>
+                  <div style={s.statValue}>{evaluation.isOfficial ? (evaluation.finishedAt ? '✅' : '⏳') : '📝'}</div>
+                  <div style={s.statLabel}>
+                    {evaluation.isOfficial
+                      ? (evaluation.finishedAt ? 'Finished' : 'In Progress')
+                      : 'Practice Run'}
+                  </div>
                 </div>
               </div>
             </div>

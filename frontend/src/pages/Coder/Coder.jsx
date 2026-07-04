@@ -260,7 +260,14 @@ export default function Coder() {
     // out, so a user who walks away mid-contest still gets scored on
     // whatever they'd solved rather than being left in limbo.
     useEffect(() => {
-        if (!contestInfo?.endTime) return;
+        // Practice attempts (isOfficial === false, taken after a contest has
+        // already ended) get contestEndTime as the contest's real — already
+        // past — end time. There's no deadline to enforce for practice mode,
+        // so skip the countdown/auto-finish entirely for it. Without this
+        // guard, secondsLeft computes to 0 on the very first tick() and
+        // immediately redirects to the evaluation page before the problem
+        // ever renders.
+        if (!contestInfo?.endTime || contestInfo.isOfficial === false) return;
 
         const tick = () => {
             const secondsLeft = Math.max(0, Math.round((new Date(contestInfo.endTime).getTime() - Date.now()) / 1000));

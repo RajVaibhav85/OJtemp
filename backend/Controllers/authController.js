@@ -308,7 +308,7 @@ const generateVerificationToken = () => {
 
 const generateAccessToken = (id) => {
     console.log("Generating Access Token for user ID:", id);
-    return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30m' });
 };
 
 const generateRefreshToken = (id) => {
