@@ -382,21 +382,37 @@ export default function Profile() {
 
   return (
     <div style={s.page}>
+      <style>{`
+        @media (max-width: 860px) {
+          .pr-navbar { flex-wrap: wrap; height: auto !important; padding: 10px 1.25rem !important; row-gap: 10px; }
+          .pr-navleft { order: 1; }
+          .pr-tabbar { order: 3; width: 100%; overflow-x: auto; justify-content: flex-start !important; }
+          .pr-navright { order: 2; margin-left: auto; }
+          .pr-backbtn-label { display: none; }
+          .pr-main { padding: 1.75rem 1.25rem 3rem !important; }
+          .pr-hero { flex-direction: column !important; align-items: flex-start !important; gap: 14px !important; }
+          .pr-hero-stats { width: 100%; justify-content: space-between !important; }
+          .pr-hero-bio { max-width: none !important; white-space: normal !important; }
+          .pr-grid-2 { grid-template-columns: 1fr !important; }
+          .pr-container { grid-template-columns: 1fr !important; }
+          .pr-card { padding: 1.5rem !important; }
+        }
+      `}</style>
       {/* Navbar: identity + tab switcher live here */}
-      <div style={s.navbar}>
-        <div style={s.navLeft}>
+      <div style={s.navbar} className="pr-navbar">
+        <div style={s.navLeft} className="pr-navleft">
           <button
             onClick={() => navigate(-1)}
             style={s.backBtn}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
           >
-            <Icon name="back" size={15} /> Workspace
+            <Icon name="back" size={15} /> <span className="pr-backbtn-label">Workspace</span>
           </button>
           <span style={s.brand}>My Profile</span>
         </div>
 
-        <div style={s.tabBar}>
+        <div style={s.tabBar} className="pr-tabbar">
           {TABS.map(tab => (
             <button
               key={tab.id}
@@ -409,22 +425,22 @@ export default function Profile() {
           ))}
         </div>
 
-        <div style={s.navRight}>
+        <div style={s.navRight} className="pr-navright">
           <div style={s.avatarSm(32)}>{initials}</div>
         </div>
       </div>
 
-      <div style={s.main}>
+      <div style={s.main} className="pr-main">
         {/* Persistent hero: quick identity + headline stats, visible on every tab */}
-        <div style={s.hero}>
+        <div style={s.hero} className="pr-hero">
           <div style={s.avatarSm(56)}>{initials}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '17px', fontWeight: '700', color: '#f3f0ff' }}>{user?.username || 'Developer'}</div>
-            <div style={{ fontSize: '13px', color: '#aaa3c8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '520px' }}>
+            <div className="pr-hero-bio" style={{ fontSize: '13px', color: '#aaa3c8', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '520px' }}>
               {bio || 'No bio yet — add one from the Edit Profile tab.'}
             </div>
           </div>
-          <div style={{ display: 'flex' }}>
+          <div className="pr-hero-stats" style={{ display: 'flex' }}>
             <div style={s.heroStat}>
               <div style={s.heroStatNum}>{stats.problemsSolved}</div>
               <div style={s.heroStatLabel}>Solved</div>
@@ -446,10 +462,10 @@ export default function Profile() {
 
         {/* ---------------- OVERVIEW TAB ---------------- */}
         {activeTab === 'overview' && (
-          <div style={s.container}>
-            <div style={s.card}>
+          <div style={s.container} className="pr-container">
+            <div style={s.card} className="pr-card">
               <h3 style={s.title}>Algorithmic Mastery Analytics</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'center' }}>
+              <div className="pr-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'center' }}>
                 <div style={{ background: 'rgba(12, 6, 28, 0.45)', padding: '24px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(167, 139, 250, 0.1)' }}>
                   <div style={{ fontSize: '36px', fontWeight: '700', color: '#a78bfa', letterSpacing: '-0.02em', filter: 'drop-shadow(0 0 10px rgba(56,189,248,0.3))' }}>{stats.problemsSolved}</div>
                   <div style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', color: '#aaa3c8', marginTop: '6px', letterSpacing: '0.05em' }}>Total Solutions Accepted</div>
@@ -468,7 +484,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div style={s.card}>
+            <div style={s.card} className="pr-card">
               <h3 style={s.title}>Bio &amp; Links</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 <div>
@@ -501,7 +517,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div style={s.card}>
+            <div style={s.card} className="pr-card">
               <h3 style={s.title}>Developer Skill Stack Summary</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div>
@@ -521,7 +537,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div style={{ ...s.card, gridColumn: '1 / -1' }}>
+            <div style={{ ...s.card, gridColumn: '1 / -1' }} className="pr-card">
               <h3 style={s.title}>Mastered Matrix History Slugs</h3>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
                 {stats.solvedProblemsList.map(slug => (
@@ -539,7 +555,7 @@ export default function Profile() {
 
         {/* ---------------- EDIT PROFILE TAB ---------------- */}
         {activeTab === 'edit' && (
-          <form onSubmit={handleSaveChanges} style={{ ...s.card, maxWidth: '760px', margin: '0 auto' }}>
+          <form onSubmit={handleSaveChanges} style={{ ...s.card, maxWidth: '760px', margin: '0 auto' }} className="pr-card">
             <h3 style={s.title}>Edit Developer Profile Specs</h3>
 
             <div style={s.group}>
@@ -659,7 +675,7 @@ export default function Profile() {
 
         {/* ---------------- SUBMISSIONS TAB ---------------- */}
         {activeTab === 'submissions' && (
-          <div style={{ ...s.card, maxWidth: '860px', margin: '0 auto' }}>
+          <div style={{ ...s.card, maxWidth: '860px', margin: '0 auto' }} className="pr-card">
             <h3 style={s.title}>Submission History</h3>
             {loadingSubmissions ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
@@ -702,7 +718,7 @@ export default function Profile() {
 
         {/* ---------------- SECURITY TAB ---------------- */}
         {activeTab === 'security' && (
-          <div style={{ ...s.card, maxWidth: '620px', margin: '0 auto' }}>
+          <div style={{ ...s.card, maxWidth: '620px', margin: '0 auto' }} className="pr-card">
             <h3 style={s.title}>Account Security</h3>
 
             <form onSubmit={handleChangePassword}>

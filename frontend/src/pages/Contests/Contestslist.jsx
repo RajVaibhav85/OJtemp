@@ -60,13 +60,22 @@ export default function ContestsList() {
 
   return (
     <div style={s.page}>
-      <nav style={s.nav}>
+      <style>{`
+        @media (max-width: 640px) {
+          .cl-nav { padding: 0 1.25rem !important; height: auto !important; min-height: 62px !important; flex-wrap: wrap; gap: 10px; padding-top: 10px !important; padding-bottom: 10px !important; }
+          .cl-main { padding: 1.75rem 1.25rem !important; }
+          .cl-welcome { font-size: 22px !important; }
+          .cl-row { flex-direction: column !important; align-items: flex-start !important; gap: 10px; }
+          .cl-card { padding: 1.25rem 1.25rem !important; }
+        }
+      `}</style>
+      <nav style={s.nav} className="cl-nav">
         <p style={s.navTitle}>🏆 Coding Contests</p>
         <button style={s.btnSecondary} onClick={() => navigate(`/${user.username}`)}>← Dashboard</button>
       </nav>
 
-      <main style={s.main}>
-        <h1 style={s.welcome}>Contests</h1>
+      <main style={s.main} className="cl-main">
+        <h1 style={s.welcome} className="cl-welcome">Contests</h1>
         <p style={s.welcomeSub}>
           Live contests count toward the leaderboard. Once a contest ends, you can still take it for practice — it just won't affect anyone's rank.
         </p>
@@ -84,11 +93,12 @@ export default function ContestsList() {
             <div
               key={c._id}
               style={s.card}
+              className="cl-card"
               onClick={() => navigate(`/contests/${c._id}`)}
               onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.3)'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.12)'}
             >
-              <div style={s.row}>
+              <div style={s.row} className="cl-row">
                 <div>
                   <h2 style={s.title}>{c.title}</h2>
                   {c.description && <p style={s.desc}>{c.description}</p>}

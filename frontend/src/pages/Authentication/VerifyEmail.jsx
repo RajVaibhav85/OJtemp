@@ -23,6 +23,7 @@ const s = {
     padding: '2.5rem 2rem',
     width: '100%',
     maxWidth: '420px',
+    boxSizing: 'border-box',
     textAlign: 'center',
     boxShadow: '0 25px 60px -15px rgba(76, 29, 149, 0.45)',
   },
@@ -75,24 +76,30 @@ export default function VerifyEmail() {
 
   return (
     <div style={s.page}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={s.card}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 480px) {
+          .ve-card { padding: 1.75rem 1.25rem !important; }
+          .ve-title { font-size: 18px !important; }
+        }
+      `}</style>
+      <div style={s.card} className="ve-card">
         {status === 'verifying' && (
           <>
             <div style={s.spinner} />
-            <h1 style={s.title}>Verifying your email...</h1>
+            <h1 style={s.title} className="ve-title">Verifying your email...</h1>
             <p style={s.text}>Hang tight, this only takes a second.</p>
           </>
         )}
         {status === 'success' && (
           <>
-            <h1 style={s.title}>You're verified 🎉</h1>
+            <h1 style={s.title} className="ve-title">You're verified 🎉</h1>
             <p style={s.text}>{message} Redirecting you to your dashboard...</p>
           </>
         )}
         {status === 'error' && (
           <>
-            <h1 style={s.title}>Verification failed</h1>
+            <h1 style={s.title} className="ve-title">Verification failed</h1>
             <p style={s.text}>{message}</p>
             <Link to="/auth" style={s.link}>Back to login</Link>
           </>

@@ -303,11 +303,23 @@ export default function AdminPanel() {
 
   return (
     <div style={s.page}>
-      <nav style={s.nav}>
+      <style>{`
+        @media (max-width: 860px) {
+          .adm-nav { padding: 12px 1.25rem !important; height: auto !important; flex-wrap: wrap; gap: 10px; }
+          .adm-nav-actions { width: 100%; overflow-x: auto; }
+          .adm-main { padding: 1.75rem 1.25rem !important; }
+          .adm-card { padding: 1.5rem !important; }
+          .adm-grid { grid-template-columns: 1fr !important; }
+          .adm-full-width { grid-column: span 1 !important; }
+          .adm-problem-row { flex-direction: column !important; align-items: flex-start !important; gap: 10px; }
+          .adm-problem-row > div:last-child { width: 100%; }
+        }
+      `}</style>
+      <nav style={s.nav} className="adm-nav">
         <p style={s.navTitle}>
           <span style={{ color: '#a78bfa', filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.5))' }}>⚙️</span> Core Repository Panel
         </p>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px' }} className="adm-nav-actions">
           <button
             style={{ ...s.btnSecondary, background: 'rgba(167, 139, 250, 0.1)', borderColor: 'rgba(167, 139, 250, 0.25)', color: '#c4b5fd' }}
             onClick={() => navigate(`/${user.username}/admin/users`)}
@@ -341,7 +353,7 @@ export default function AdminPanel() {
         </div>
       </nav>
 
-      <main style={s.main}>
+      <main style={s.main} className="adm-main">
         {message.text && (
           <div style={{ 
             padding: '14px 20px', 
@@ -360,10 +372,10 @@ export default function AdminPanel() {
         )}
 
         {/* Problem Creation/Editing Section */}
-        <div style={s.card}>
+        <div style={s.card} className="adm-card">
           <p style={s.cardTitle}>{isEditing ? "📝 Modify Challenge Settings" : "➕ Register New Code Challenge"}</p>
           <form onSubmit={handleSubmit}>
-            <div style={s.grid}>
+            <div style={s.grid} className="adm-grid">
               <div>
                 <label style={s.label}>Challenge Name *</label>
                 <input 
@@ -409,7 +421,7 @@ export default function AdminPanel() {
                   }}
                 />
               </div>
-              <div style={s.fullWidth}>
+              <div style={s.fullWidth} className="adm-full-width">
                 <label style={s.label}>Problem Statement *</label>
                 <textarea 
                   style={{ ...s.textarea, fontFamily: 'inherit', minHeight: '90px' }} 
@@ -428,7 +440,7 @@ export default function AdminPanel() {
                   }}
                 />
               </div>
-              <div style={s.fullWidth}>
+              <div style={s.fullWidth} className="adm-full-width">
                 <label style={s.label}>Short Description</label>
                 <textarea 
                   style={{ ...s.textarea, fontFamily: 'inherit', minHeight: '70px' }} 
@@ -517,7 +529,7 @@ export default function AdminPanel() {
                 />
               </div>
 
-              <div style={s.fullWidth}>
+              <div style={s.fullWidth} className="adm-full-width">
                 <label style={s.label}>Select Tags Hierarchy</label>
                 <div style={s.tagContainer}>
                   {AVAILABLE_TAGS.map(tag => {
@@ -584,11 +596,11 @@ export default function AdminPanel() {
         </div>
 
         {/* Challenge Inventory List Database */}
-        <div style={s.card}>
+        <div style={s.card} className="adm-card">
           <p style={s.cardTitle}>📦 Challenge Inventory Grid ({problems.length})</p>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {problems.map(p => (
-              <div key={p.code} style={s.problemRow}>
+              <div key={p.code} style={s.problemRow} className="adm-problem-row">
                 <div>
                   <strong style={{ color: '#f3f0ff', fontSize: '14px', fontWeight: '500' }}>{p.name}</strong>
                   <span style={{ fontSize: '12px', color: '#8d85ab', marginLeft: '10px', fontFamily: 'Fira Code, monospace', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '4px' }}>{p.code}</span>
@@ -626,7 +638,7 @@ export default function AdminPanel() {
 
         {/* --- DYNAMIC TEST CASES CRUD PANEL --- */}
         {selectedProblemCode && (
-          <div style={{ ...s.card, borderTop: '3px solid #a78bfa', borderTopLeftRadius: '6px', borderTopRightRadius: '6px' }}>
+          <div style={{ ...s.card, borderTop: '3px solid #a78bfa', borderTopLeftRadius: '6px', borderTopRightRadius: '6px' }} className="adm-card">
             <p style={{ ...s.cardTitle, marginBottom: '6px' }}>🧪 Test Cases Matrix for: <span style={{color: '#a78bfa', fontFamily: 'Fira Code, monospace', fontWeight: '500'}}>{selectedProblemCode}</span></p>
             <p style={{ fontSize: '13px', color: '#aaa3c8', marginBottom: '24px' }}>Perform full management modifications directly against active records.</p>
 
@@ -635,7 +647,7 @@ export default function AdminPanel() {
               <p style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#aaa3c8', margin: '0 0 16px 0' }}>
                 {isEditingTestCaseId ? "✏️ Edit Target Test Case" : "➕ Append New Test Case Node"}
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }} className="adm-grid">
                 <div>
                   <label style={s.label}>Input Stream Data</label>
                   <textarea 
@@ -703,7 +715,7 @@ export default function AdminPanel() {
                         <button style={{ ...s.actionBtn, margin: 0, padding: '4px 10px', color: '#f87171', background: 'transparent' }} onClick={() => handleTestCaseDelete(tc._id)}>Purge</button>
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', fontFamily: 'Fira Code, monospace', background: 'rgba(12, 6, 28, 0.5)', padding: '16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)', color: '#c7bfe0' }}>
+                    <div className="adm-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', fontFamily: 'Fira Code, monospace', background: 'rgba(12, 6, 28, 0.5)', padding: '16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)', color: '#c7bfe0' }}>
                       <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><strong style={{ color: '#6f6790', display: 'block', marginBottom: '4px' }}>In:</strong>{tc.input}</div>
                       <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><strong style={{ color: '#6f6790', display: 'block', marginBottom: '4px' }}>Out:</strong>{tc.output}</div>
                     </div>

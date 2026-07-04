@@ -42,6 +42,7 @@ const s = {
     padding: '2.5rem 2rem',
     width: '100%',
     maxWidth: '420px',
+    boxSizing: 'border-box',
     boxShadow: '0 25px 60px -15px rgba(76, 29, 149, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.06)'
   },
   header: {
@@ -271,9 +272,16 @@ export default function Auth() {
 
   return (
     <div style={s.page}>
-      <div style={s.card}>
+      <style>{`
+        @media (max-width: 420px) {
+          .auth-card { padding: 1.75rem 1.25rem !important; }
+          .auth-row { grid-template-columns: 1fr !important; gap: 0 !important; }
+          .auth-title { font-size: 22px !important; }
+        }
+      `}</style>
+      <div style={s.card} className="auth-card">
         <div style={s.header}>
-          <h1 style={s.title}>Online Judge</h1>
+          <h1 style={s.title} className="auth-title">Online Judge</h1>
           <p style={s.subtitle}>Master your coding skills</p>
         </div>
 
@@ -346,7 +354,7 @@ export default function Auth() {
           </form>
         ) : (
           <form onSubmit={handleSignup}>
-            <div style={s.row}>
+            <div style={s.row} className="auth-row">
               <div style={s.group}>
                 <label style={s.label}>Username</label>
                 <input style={s.input} type="text" name="username"
@@ -370,7 +378,7 @@ export default function Auth() {
                 placeholder="you@example.com" required disabled={loading}
                 onFocus={focusOn} onBlur={focusOff} />
             </div>
-            <div style={s.row}>
+            <div style={s.row} className="auth-row">
               <div style={s.group}>
                 <label style={s.label}>Password</label>
                 <PasswordInput name="password" value={signupForm.password} onChange={handleChange(setSignupForm)} placeholder="••••••••" disabled={loading} />

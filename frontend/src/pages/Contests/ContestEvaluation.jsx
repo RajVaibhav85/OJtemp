@@ -9,16 +9,36 @@ const s = {
   page: { minHeight: '100vh', background: 'linear-gradient(160deg, #0a0518 0%, #1b1033 45%, #2a1854 75%, #120a26 100%)', fontFamily: 'Inter, system-ui, sans-serif', color: '#f3f0ff' },
   nav: { background: 'rgba(18, 10, 36, 0.55)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(167, 139, 250, 0.1)', padding: '0 2.5rem', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 },
   navTitle: { fontSize: '16px', fontWeight: '600', margin: 0 },
-  btnSecondary: { background: 'rgba(167, 139, 250, 0.06)', border: '1px solid rgba(167, 139, 250, 0.14)', borderRadius: '8px', padding: '9px 16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', color: '#c7bfe0' },
+  btnSecondary: { background: 'rgba(167, 139, 250, 0.06)', border: '1px solid rgba(167, 139, 250, 0.14)', borderRadius: '8px', padding: '9px 16px', fontSize: '13px', fontWeight: '500', cursor: 'pointer', color: '#c7bfe0', whiteSpace: 'nowrap' },
   main: { maxWidth: '820px', margin: '0 auto', padding: '3rem 2rem' },
   card: { background: 'rgba(26, 16, 46, 0.42)', backdropFilter: 'blur(12px)', border: '1px solid rgba(167, 139, 250, 0.12)', borderRadius: '16px', padding: '2rem', marginBottom: '1.5rem', boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)' },
   statGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginTop: '20px' },
   stat: { background: 'rgba(167, 139, 250, 0.06)', border: '1px solid rgba(167, 139, 250, 0.14)', borderRadius: '12px', padding: '16px', textAlign: 'center' },
   statValue: { fontSize: '22px', fontWeight: 800, color: '#f3f0ff' },
   statLabel: { fontSize: '11px', color: '#aaa3c8', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' },
-  problemRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid rgba(167, 139, 250, 0.06)' },
-  badge: (bg, color, border) => ({ fontSize: '11px', fontWeight: '700', padding: '4px 12px', borderRadius: '20px', background: bg, color, border: `1px solid ${border}` }),
+  problemRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid rgba(167, 139, 250, 0.06)', gap: '12px' },
+  badge: (bg, color, border) => ({ fontSize: '11px', fontWeight: '700', padding: '4px 12px', borderRadius: '20px', background: bg, color, border: `1px solid ${border}`, whiteSpace: 'nowrap', flexShrink: 0 }),
 };
+
+// Injected once: covers what inline styles can't — breakpoints for the stat grid,
+// header wrap behavior, and comfortable touch targets on small screens.
+const RESPONSIVE_CSS = `
+  @media (max-width: 640px) {
+    .oj-eval .oj-eval-nav { padding: 0 1.1rem; height: 60px; }
+    .oj-eval .oj-eval-nav-title { font-size: 14px; }
+    .oj-eval .oj-eval-main { padding: 1.5rem 1rem 3rem; }
+    .oj-eval .oj-eval-card { padding: 1.25rem; border-radius: 14px; }
+    .oj-eval .oj-eval-header { flex-direction: column; align-items: flex-start !important; gap: 8px; }
+    .oj-eval .oj-eval-title { font-size: 19px !important; }
+    .oj-eval .oj-eval-stat-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    .oj-eval .oj-eval-problem-row { padding: 0.85rem 1.1rem; }
+    .oj-eval .oj-eval-problem-name { overflow-wrap: anywhere; }
+  }
+
+  @media (max-width: 380px) {
+    .oj-eval .oj-eval-stat-grid { grid-template-columns: 1fr 1fr !important; }
+  }
+`;
 
 const formatTime = (secs) => {
   if (secs == null) return '—';
@@ -57,22 +77,24 @@ export default function ContestEvaluation() {
   if (loading || !user) return null
 
   return (
-    <div style={s.page}>
-      <nav style={s.nav}>
-        <p style={s.navTitle}>📊 My Evaluation</p>
+    <div style={s.page} className="oj-eval">
+      <style>{RESPONSIVE_CSS}</style>
+
+      <nav style={s.nav} className="oj-eval-nav">
+        <p style={s.navTitle} className="oj-eval-nav-title">📊 My Evaluation</p>
         <button style={s.btnSecondary} onClick={() => navigate(`/contests/${id}`)}>← Contest</button>
       </nav>
 
-      <main style={s.main}>
+      <main style={s.main} className="oj-eval-main">
         {isFetching ? (
           <p style={{ color: '#aaa3c8', fontSize: '14px' }}>Loading your evaluation...</p>
         ) : error ? (
           <p style={{ color: '#f87171', fontSize: '14px' }}>{error}</p>
         ) : (
           <>
-            <div style={s.card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0 }}>{evaluation.contestTitle}</h1>
+            <div style={s.card} className="oj-eval-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }} className="oj-eval-header">
+                <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0, overflowWrap: 'anywhere' }} className="oj-eval-title">{evaluation.contestTitle}</h1>
                 <span style={evaluation.isOfficial
                   ? s.badge('rgba(16, 185, 129, 0.15)', '#34d399', 'rgba(52, 211, 153, 0.3)')
                   : s.badge('rgba(120, 53, 15, 0.25)', '#fbbf24', 'rgba(251, 191, 36, 0.3)')}>
@@ -86,7 +108,7 @@ export default function ContestEvaluation() {
                 </p>
               )}
 
-              <div style={s.statGrid}>
+              <div style={s.statGrid} className="oj-eval-stat-grid">
                 <div style={s.stat}>
                   <div style={s.statValue}>{evaluation.isOfficial && evaluation.rank ? `#${evaluation.rank}` : '—'}</div>
                   <div style={s.statLabel}>Rank</div>
@@ -106,14 +128,14 @@ export default function ContestEvaluation() {
               </div>
             </div>
 
-            <div style={{ ...s.card, padding: 0 }}>
+            <div style={{ ...s.card, padding: 0 }} className="oj-eval-card">
               <div style={{ padding: '1.25rem 1.5rem 0.75rem', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#aaa3c8' }}>
                 Problem Breakdown
               </div>
               {evaluation.problemStats.map((ps, i) => (
-                <div key={i} style={s.problemRow}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600 }}>{ps.problem?.name || 'Unknown problem'}</div>
+                <div key={i} style={s.problemRow} className="oj-eval-problem-row">
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600 }} className="oj-eval-problem-name">{ps.problem?.name || 'Unknown problem'}</div>
                     <div style={{ fontSize: '12px', color: '#8b82b0', marginTop: '2px' }}>
                       {ps.attempts} attempt{ps.attempts === 1 ? '' : 's'}
                       {ps.solved && ps.bestExecutionTime != null && ` · ${ps.bestExecutionTime}ms · ${ps.bestMemory}MB`}

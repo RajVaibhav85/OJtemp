@@ -623,11 +623,25 @@ export default function Coder() {
 }
 
     return (
-        <div ref={containerRef} style={{ display: 'flex', height: '100vh', background: '#0a0518', color: '#f3f0ff', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden' }}>
-            
+        <div ref={containerRef} className="cod-container" style={{ display: 'flex', height: '100vh', background: '#0a0518', color: '#f3f0ff', fontFamily: 'Inter, system-ui, sans-serif', overflow: 'hidden' }}>
+            <style>{`
+                @media (max-width: 900px) {
+                    .cod-container { flex-direction: column !important; height: auto !important; min-height: 100vh; overflow: auto !important; }
+                    .cod-left-panel { width: 100% !important; height: 46vh !important; border-right: none !important; border-bottom: 1px solid rgba(255,255,255,0.06); }
+                    .cod-h-resizer { display: none !important; }
+                    .cod-right-panel { width: 100% !important; height: auto !important; min-height: 70vh; }
+                    .cod-toolbar { flex-wrap: wrap !important; overflow-x: auto; }
+                    .cod-editor-wrap { height: 46vh !important; }
+                    .cod-console-tabs { overflow-x: auto; }
+                    .cod-console-tabs button { padding: 10px 12px !important; white-space: nowrap; }
+                    .cod-io-row { flex-direction: column !important; }
+                    .cod-tc-grid { grid-template-columns: 1fr !important; }
+                    .cod-drawer { max-width: 100% !important; }
+                }
+            `}</style>
             {/* Split Panel - Descriptions Framework Area */}
-            <div style={{ width: `${leftPanelWidth}%`, borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', background: '#0b0f19' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(12, 6, 28, 0.25)' }}>
+            <div className="cod-left-panel" style={{ width: `${leftPanelWidth}%`, borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', background: '#0b0f19' }}>
+                <div className="cod-panel-header" style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(12, 6, 28, 0.25)', flexWrap: 'wrap', gap: '10px' }}>
                     <button 
                         onClick={() => navigate(`/${userContext?.username || ''}`)} 
                         style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#aaa3c8', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', transition: 'all 0.2s' }}
@@ -655,6 +669,8 @@ export default function Coder() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
                         background: contestInfo?.isOfficial === false ? 'rgba(120, 53, 15, 0.25)' : 'rgba(124, 58, 237, 0.18)',
                         borderBottom: '1px solid rgba(167, 139, 250, 0.15)',
                     }}>
@@ -709,11 +725,11 @@ export default function Coder() {
                 </div>
             </div>
 
-            <div onMouseDown={startHorizontalResize} style={{ width: '4px', background: '#0a0518', cursor: 'col-resize', zIndex: 10, opacity: 0.5, transition: 'background 0.2s' }} onMouseEnter={e => e.target.style.background = '#a78bfa'} onMouseLeave={e => e.target.style.background = '#0a0518'} />
+            <div className="cod-h-resizer" onMouseDown={startHorizontalResize} style={{ width: '4px', background: '#0a0518', cursor: 'col-resize', zIndex: 10, opacity: 0.5, transition: 'background 0.2s' }} onMouseEnter={e => e.target.style.background = '#a78bfa'} onMouseLeave={e => e.target.style.background = '#0a0518'} />
 
             {/* Split Panel - Workspace Editor Space */}
-            <div ref={rightPanelRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', background: '#1e1e1e' }}>
-                <div style={{ padding: '12px 20px', display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(17, 24, 39, 0.6)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }}>
+            <div ref={rightPanelRef} className="cod-right-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', background: '#1e1e1e' }}>
+                <div className="cod-toolbar" style={{ padding: '12px 20px', display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(17, 24, 39, 0.6)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }}>
                     <select 
                         value={language} 
                         onChange={(e) => handleLanguageChange(e.target.value)}
@@ -731,7 +747,7 @@ export default function Coder() {
                     <button onClick={handleAiReview} disabled={isAiLoading} style={{ padding: '7px 14px', borderRadius: '6px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', marginLeft: 'auto', fontSize: '13px', boxShadow: '0 4px 12px 0 rgba(99, 102, 241, 0.25)' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>✨ AI REVIEW</button>
                 </div>
 
-                <div style={{ height: `${editorHeight}%`, width: '100%', overflow: 'hidden' }}>
+                <div className="cod-editor-wrap" style={{ height: `${editorHeight}%`, width: '100%', overflow: 'hidden' }}>
                     <Editor
                         height="100%"
                         theme="vs-dark"
@@ -746,7 +762,7 @@ export default function Coder() {
 
                 {/* Outputs Sandboxed Control Console Tray */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#070a13', overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', background: 'rgba(12, 6, 28, 0.45)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="cod-console-tabs" style={{ display: 'flex', background: 'rgba(12, 6, 28, 0.45)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                         <button onClick={() => setConsoleMode('custom')} style={{ padding: '12px 20px', background: consoleMode === 'custom' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'custom' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'custom' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Custom Console</button>
                         <button onClick={() => setConsoleMode('testcases')} style={{ padding: '12px 20px', background: consoleMode === 'testcases' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'testcases' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'testcases' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Test Run Evaluation Matrix {executionResults && `(${executionResults.filter(r => r.passed).length}/${executionResults.length})`}</button>
                         <button onClick={() => setConsoleMode('submissions')} style={{ padding: '12px 20px', background: consoleMode === 'submissions' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'submissions' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'submissions' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Submission History {submissionHistory.length > 0 && `(${submissionHistory.length})`}</button>
@@ -754,7 +770,7 @@ export default function Coder() {
 
                     <div style={{ flex: 1, padding: '1.25rem', overflowY: 'auto' }}>
                         {consoleMode === 'custom' && (
-                            <div style={{ display: 'flex', gap: '16px', height: '100%', minHeight: '110px' }}>
+                            <div className="cod-io-row" style={{ display: 'flex', gap: '16px', height: '100%', minHeight: '110px' }}>
                                 <textarea value={customInput} onChange={(e) => setCustomInput(e.target.value)} style={{ flex: 1, background: 'rgba(12, 6, 28, 0.35)', color: '#f3f0ff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px', fontFamily: 'Fira Code, monospace', resize: 'none', fontSize: '13px', outline: 'none' }} onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.2)'} onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
                                 <div style={{ flex: 1, background: 'rgba(3, 7, 18, 0.4)', color: customError ? '#f87171' : '#34d399', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px', fontFamily: 'Fira Code, monospace', whiteSpace: 'pre-wrap', fontSize: '13px', overflowY: 'auto', boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.2)' }}>
                                     {customOutput || "Console output buffer trace is empty."}
@@ -777,7 +793,7 @@ export default function Coder() {
                                                     <span style={{ fontSize: '11px', color: '#8d85ab', fontFamily: 'monospace' }}>{res.diagnostics}</span>
                                                 </div>
                                                 {!res.isHidden && (
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '12.5px', fontFamily: 'Fira Code, monospace', background: 'rgba(3, 7, 18, 0.3)', padding: '10px', borderRadius: '6px', marginTop: '6px', color: '#cbd5e1' }}>
+                                                    <div className="cod-tc-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', fontSize: '12.5px', fontFamily: 'Fira Code, monospace', background: 'rgba(3, 7, 18, 0.3)', padding: '10px', borderRadius: '6px', marginTop: '6px', color: '#cbd5e1' }}>
                                                         <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Input Stream:</span> <pre style={{ margin: '4px 0 0 0', color: '#f3f0ff' }}>{res.input}</pre></div>
                                                         <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Expected Configuration:</span> <pre style={{ margin: '4px 0 0 0', color: '#34d399' }}>{res.expectedOutput}</pre></div>
                                                         <div><span style={{ color: '#6f6790', display: 'block', fontSize: '11px', fontWeight: '600' }}>Actual Outcome:</span> <pre style={{ margin: '4px 0 0 0', color: res.passed ? '#34d399' : '#f87171' }}>{res.actualOutput}</pre></div>
@@ -826,7 +842,7 @@ export default function Coder() {
 
             {/* Sliding Layer - AI Metrics Sidecar */}
             {isDrawerOpen && <div onClick={() => setIsDrawerOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)', zIndex: 999 }} />}
-            <div style={{ position: 'fixed', top: 0, right: isDrawerOpen ? 0 : '-560px', width: '100%', maxWidth: '540px', height: '100vh', background: 'rgba(18, 10, 36, 0.92)', backdropFilter: 'blur(20px)', borderLeft: '1px solid rgba(167, 139, 250, 0.14)', boxShadow: '-10px 0 40px rgba(0,0,0,0.6)', zIndex: 1000, transition: 'right 0.3s cubic-bezier(0.4, 0, 0.2, 1)', display: 'flex', flexDirection: 'column' }}>
+            <div className="cod-drawer" style={{ position: 'fixed', top: 0, right: isDrawerOpen ? 0 : '-560px', width: '100%', maxWidth: '540px', height: '100vh', background: 'rgba(18, 10, 36, 0.92)', backdropFilter: 'blur(20px)', borderLeft: '1px solid rgba(167, 139, 250, 0.14)', boxShadow: '-10px 0 40px rgba(0,0,0,0.6)', zIndex: 1000, transition: 'right 0.3s cubic-bezier(0.4, 0, 0.2, 1)', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid rgba(167, 139, 250, 0.12)', background: 'rgba(12, 6, 28, 0.5)' }}>
                     <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '600', color: '#c4b5fd', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '8px' }}>✨ AI Code Review</h2>
                     <button onClick={() => setIsDrawerOpen(false)} style={{ background: 'none', border: 'none', color: '#aaa3c8', fontSize: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>&times;</button>
@@ -851,7 +867,7 @@ export default function Coder() {
                     {!isAiLoading && !aiReviewError && aiReviewData && (
                         <>
                             {/* Complexity */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="cod-tc-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                 <div style={{ background: 'rgba(167, 139, 250, 0.08)', border: '1px solid rgba(167, 139, 250, 0.18)', borderRadius: '12px', padding: '14px 16px' }}>
                                     <div style={{ fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#a78bfa', marginBottom: '6px' }}>Time</div>
                                     <div style={{ fontSize: '20px', fontWeight: '700', color: '#f3f0ff', fontFamily: 'Fira Code, monospace' }}>{aiReviewData.timeComplexity}</div>
