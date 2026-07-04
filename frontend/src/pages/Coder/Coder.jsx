@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
+import { apiFetch } from '../../utils/apiFetch';
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 const COMPILER_API = `${BACKEND_URL}/api/compiler`;
@@ -103,28 +104,11 @@ export default function Coder() {
             try {
                 let currentUserProfile = userContext;
                 if (!currentUserProfile) {
-                    let profileRes = await fetch(`${AUTH_API}/me`, {
-                        method: 'GET',
-                        credentials: 'include'
-                    });
-
-                    // Access token may have simply expired (short-lived by design).
-                    // Before treating this as a real auth failure, silently try to
-                    // refresh it — same flow AuthContext runs on initial app load —
-                    // and retry /me once. Only fall through to the catch block (and
-                    // the resulting redirect) if the refresh token is also invalid.
-                    if (profileRes.status === 401) {
-                        const refreshRes = await fetch(`${AUTH_API}/refresh`, {
-                            method: 'POST',
-                            credentials: 'include'
-                        });
-                        if (refreshRes.ok) {
-                            profileRes = await fetch(`${AUTH_API}/me`, {
-                                method: 'GET',
-                                credentials: 'include'
-                            });
-                        }
-                    }
+                    // apiFetch already handles the "access token expired mid-session"
+                    // case internally (silent refresh + one retry). Only reaching a
+                    // non-ok response here means the refresh token itself is dead —
+                    // a real logged-out state, correctly handled by the redirect below.
+                    const profileRes = await apiFetch(`${AUTH_API}/me`, { method: 'GET' });
 
                     if (!profileRes.ok) throw new Error('User session context unauthorized.');
                     currentUserProfile = await profileRes.json();
@@ -146,7 +130,7 @@ export default function Coder() {
 
                 // Check whether this problem is already solved by the user
                 try {
-                    const profileRes = await fetch(`${BACKEND_URL}/api/profile/get-profile`, { credentials: 'include' });
+                    const profileRes = await apiFetch(`${BACKEND_URL}/api/profile/get-profile`);
                     if (profileRes.ok) {
                         const profileData = await profileRes.json();
                         const solvedList = profileData?.stats?.solvedProblemsList || [];
@@ -163,9 +147,8 @@ export default function Coder() {
                 // so this can now contain many entries).
                 let historyData = [];
                 try {
-                    const historyRes = await fetch(`${DB_API}/problem-submissions/${resolvedUserId}/${probData._id}`, {
-                        method: 'GET',
-                        credentials: 'include'
+                    const historyRes = await apiFetch(`${DB_API}/problem-submissions/${resolvedUserId}/${probData._id}`, {
+                        method: 'GET'
                     });
                     if (historyRes.ok) {
                         const historyJson = await historyRes.json();
@@ -237,11 +220,10 @@ export default function Coder() {
         let cancelled = false;
         const resolvedUserId = userContext._id || userContext.id;
 
-        fetch(`${CONTEST_API}/${contestId}/join`, {
+        apiFetch(`${CONTEST_API}/${contestId}/join`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: resolvedUserId }),
-            credentials: 'include'
+            body: JSON.stringify({ userId: resolvedUserId })
         })
             .then(res => res.json())
             .then(data => {
@@ -288,14 +270,13 @@ export default function Coder() {
         if (!contestId || !userContext) return;
         const resolvedUserId = userContext._id || userContext.id;
         try {
-            await fetch(`${CONTEST_API}/${contestId}/finish`, {
+            await apiFetch(`${CONTEST_API}/${contestId}/finish`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: resolvedUserId }),
-                credentials: 'include'
+                body: JSON.stringify({ userId: resolvedUserId })
             });
         } catch (_) { /* best-effort — evaluation page will still compute from whatever was recorded */ }
-        navigate(`/contests/${contestId}/evaluation`);
+        navigate(`/contests/${contestId}`);
     };
 
     const formatCountdown = (secs) => {
@@ -437,11 +418,10 @@ export default function Coder() {
         setConsoleMode('custom');
 
         try {
-            const response = await fetch(`${COMPILER_API}/run`, {
+            const response = await apiFetch(`${COMPILER_API}/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ language, code: getActiveCode(), input: customInput }),
-                credentials: 'include'
+                body: JSON.stringify({ language, code: getActiveCode(), input: customInput })
             });
             const data = await response.json();
             
@@ -482,11 +462,10 @@ export default function Coder() {
         try {
             const tasks = targets.map(async (tc, idx) => {
                 try {
-                    const response = await fetch(`${COMPILER_API}/run`, {
+                    const response = await apiFetch(`${COMPILER_API}/run`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ language, code: activeCodeBuffer, input: tc.input }),
-                        credentials: 'include'
+                        body: JSON.stringify({ language, code: activeCodeBuffer, input: tc.input })
                     });
                     const data = await response.json();
                     
@@ -553,7 +532,7 @@ export default function Coder() {
                 const schemaMappedLanguage = languageMapping.toBackend[language] || 'C++';
                 const resolvedUserId = userContext._id || userContext.id;
 
-                const subRes = await fetch(`${DB_API}/submit-solution/${problemCode}`, {
+                const subRes = await apiFetch(`${DB_API}/submit-solution/${problemCode}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -562,8 +541,7 @@ export default function Coder() {
                         code: activeCodeBuffer,
                         language: schemaMappedLanguage,
                         contestId: contestId || undefined
-                    }),
-                    credentials: 'include'
+                    })
                 });
 
                 const subData = await subRes.json();
@@ -574,7 +552,7 @@ export default function Coder() {
                     if (subData.data?._id) {
                         
 
-                        await fetch(`${DB_API}/update-solution-verdict/${subData.data._id}`, {
+                        await apiFetch(`${DB_API}/update-solution-verdict/${subData.data._id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -584,13 +562,12 @@ export default function Coder() {
                                 output: errorsFound ? 'Assertion mismatch trace metrics recorded.' : 'All compilation limits valid.',
                                 testsPassed: testsPassedCount,
                                 testsTotal: testsTotalCount
-                            }),
-                            credentials: 'include'
+                            })
                         });
 
                         // Refresh the Submission History tab so the new attempt shows up immediately.
                         try {
-                            const historyRes = await fetch(`${DB_API}/problem-submissions/${resolvedUserId}/${problem._id}`, { credentials: 'include' });
+                            const historyRes = await apiFetch(`${DB_API}/problem-submissions/${resolvedUserId}/${problem._id}`);
                             if (historyRes.ok) {
                                 const historyJson = await historyRes.json();
                                 setSubmissionHistory(Array.isArray(historyJson.data) ? historyJson.data : []);
@@ -627,11 +604,10 @@ export default function Coder() {
         setAiReviewError('');
         setAiReviewData(null);
         try {
-            const response = await fetch(`${AI_API}/ai-review`, {
+            const response = await apiFetch(`${AI_API}/ai-review`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: getActiveCode(), language, description: problem ? problem.statement : '' }),
-                credentials: 'include'
+                body: JSON.stringify({ code: getActiveCode(), language, description: problem ? problem.statement : '' })
             });
             const data = await response.json();
             if (response.ok) {
@@ -751,7 +727,7 @@ export default function Coder() {
                                 onClick={handleFinishContest}
                                 style={{ padding: '5px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#f3f0ff', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}
                             >
-                                GO TO Evaluation
+                                Submit Attempt
                             </button>
                         </div>
                     </div>

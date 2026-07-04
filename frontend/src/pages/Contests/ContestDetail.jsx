@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../components/AuthContext'
+import { apiFetch } from '../../utils/apiFetch'
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 const CONTEST_API = `${BACKEND_URL}/api/contests`;
@@ -42,14 +43,19 @@ export default function ContestDetail() {
 
   const resolvedUserId = user?._id || user?.id
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback(async () => {
     if (!resolvedUserId) return
-    fetch(`${CONTEST_API}/${id}?userId=${resolvedUserId}`)
-      .then(res => res.json())
-      .then(data => { if (data.success) setContest(data.data) })
-      .catch(() => setError('Failed to load contest.'))
-      .finally(() => setIsFetching(false))
-  }, [id, resolvedUserId])
+    try {
+      const res = await apiFetch(`${CONTEST_API}/${id}?userId=${resolvedUserId}`)
+      if (res.status === 401) { navigate('/auth'); return }
+      const data = await res.json()
+      if (data.success) setContest(data.data)
+    } catch (_) {
+      setError('Failed to load contest.')
+    } finally {
+      setIsFetching(false)
+    }
+  }, [id, resolvedUserId, navigate])
 
   useEffect(() => {
     if (!loading && !user) navigate('/auth')
@@ -61,12 +67,12 @@ export default function ContestDetail() {
     setIsJoining(true)
     setError('')
     try {
-      const res = await fetch(`${CONTEST_API}/${id}/join`, {
+      const res = await apiFetch(`${CONTEST_API}/${id}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: resolvedUserId }),
-        credentials: 'include',
       })
+      if (res.status === 401) { navigate('/auth'); return }
       const data = await res.json()
       if (!res.ok || !data.success) {
         setError(data.message || 'Could not start the contest.')

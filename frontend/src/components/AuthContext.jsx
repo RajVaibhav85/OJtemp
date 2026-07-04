@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { apiFetch } from '../utils/apiFetch'
 
 const AuthContext = createContext(null)
 const API = import.meta.env.VITE_SERVER_URL + '/api/auth'
@@ -18,29 +19,15 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkAuthSession = async () => {
       try {
-        const res = await fetch(`${API}/me`, { credentials: 'include' })
-        
+        const res = await apiFetch(`${API}/me`)
+
         if (res.ok) {
           const data = await res.json()
           setUser(data)
-        } else if (res.status === 401) {
-          const refreshRes = await fetch(`${API}/refresh`, { 
-            method: 'POST', 
-            credentials: 'include' 
-          })
-
-          if (refreshRes.ok) {
-            const retryMeRes = await fetch(`${API}/me`, { credentials: 'include' })
-            if (retryMeRes.ok) {
-              const data = await retryMeRes.json()
-              setUser(data)
-            } else {
-              setUser(null)
-            }
-          } else {
-            setUser(null)
-          }
         } else {
+          // apiFetch already tried one silent refresh-and-retry internally.
+          // Still failing here means the refresh token itself is gone/expired
+          // — a real logged-out state, not a recoverable token hiccup.
           setUser(null)
         }
       } catch (err) {

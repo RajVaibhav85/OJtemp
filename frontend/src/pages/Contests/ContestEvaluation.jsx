@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../components/AuthContext'
+import { apiFetch } from '../../utils/apiFetch'
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 const CONTEST_API = `${BACKEND_URL}/api/contests`;
@@ -64,15 +65,24 @@ export default function ContestEvaluation() {
 
   useEffect(() => {
     if (!resolvedUserId) return
-    fetch(`${CONTEST_API}/${id}/evaluation/${resolvedUserId}`)
-      .then(res => res.json())
-      .then(data => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const res = await apiFetch(`${CONTEST_API}/${id}/evaluation/${resolvedUserId}`)
+        if (cancelled) return
+        if (res.status === 401) { navigate('/auth'); return }
+        const data = await res.json()
         if (data.success) setEvaluation(data.data)
         else setError(data.message || 'You have not attempted this contest.')
-      })
-      .catch(() => setError('Failed to load your evaluation.'))
-      .finally(() => setIsFetching(false))
-  }, [id, resolvedUserId])
+      } catch (_) {
+        if (!cancelled) setError('Failed to load your evaluation.')
+      } finally {
+        if (!cancelled) setIsFetching(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [id, resolvedUserId, navigate])
 
   if (loading || !user) return null
 
