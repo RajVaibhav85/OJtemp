@@ -17,12 +17,38 @@ app.use(cors({
 app.use(express.json());
 connectDB()
 
-
 const PORT = process.env.PORT || 5000;
 
-app.get('/' , (req , res) => {
-    res.status(200).send('HomePage: Health check route');
-})
+// Resolve application metadata at boot time
+let appVersion = '1.0.0';
+let gitCommit = 'unknown';
+
+try {
+    // Dynamically grab version from package.json
+    appVersion = require('./package.json').version;
+} catch (err) {
+    appVersion = process.env.APP_VERSION || '2.0.0';
+}
+
+try {
+    // Extract short commit SHA via git CLI if available
+    gitCommit = execSync('git rev-parse --short HEAD').toString().trim();
+} catch (err) {
+    // Fallback for containerized environments without active .git directories
+    gitCommit = process.env.GIT_COMMIT_SHA || 'N/A';
+}
+
+// ADVANCED HEALTH CHECK ROUTE
+app.get('/', (req, res) => {
+    res.status(200).json({
+        status: 'UP',
+        health: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: `${Math.floor(process.uptime())}s`,
+        version: appVersion,
+        commit: gitCommit
+    });
+});
 
 const authRoutes = require('./Routes/authRoutes')
 app.use('/api/auth', authRoutes)
@@ -72,7 +98,6 @@ app.use((err, req, res, next) => {
     });
 });
 
-
 const JUDGE_IMAGES = [
   'frolvlad/alpine-gxx:latest',
   'python:3.11-alpine',
@@ -89,7 +114,6 @@ JUDGE_IMAGES.forEach((img) => {
     console.warn(`⚠ Could not pull ${img}:`, e.message);
   }
 });
-
 
 app.listen(PORT , () => {
     console.log(`Listening to http://localhost:${PORT}`);
