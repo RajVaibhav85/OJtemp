@@ -5,6 +5,11 @@ const dbController = require('../Controllers/dbController');
 // Problem Routes
 router.put('/insert-problem', dbController.insertProblem);
 router.get('/get-problems', dbController.getProblems);
+
+// Problem Stats & Analytics (Added)
+router.get('/problem-stats', dbController.getAllProblemStats);
+router.get('/problem-stats/:code', dbController.getProblemStats);
+
 router.get('/get-problem/:code', dbController.getProblem);
 router.put('/update-problem/:code', dbController.updateProblem);
 router.delete('/delete-problem/:code', dbController.deleteProblem);

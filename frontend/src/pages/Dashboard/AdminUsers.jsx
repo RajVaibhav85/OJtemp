@@ -4,28 +4,6 @@ import { useAuth } from '../../components/AuthContext'
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
-// ---------------------------------------------------------------------------
-// Expected backend endpoints (add these if they don't exist yet):
-//
-//   GET  /api/admin/users
-//     -> { success: true, data: [{ _id, username, email, role,
-//          createdAt, solvedCount, submissionCount, lastActive }] }
-//
-//   GET  /api/admin/activity?limit=100
-//     -> { success: true, data: [{ _id, userId, username, problemCode,
-//          problemName, language, verdict, createdAt }] }
-//
-//   PUT  /api/admin/users/:id/role
-//     body: { role: 'admin' | 'user' }
-//     -> { success: true, message }
-//
-// All three should sit behind `protect` + `requireAdmin` middleware, same as
-// the rest of the admin surface. If your actual routes differ, just change
-// the URLs below — everything else in this file stays the same.
-// ---------------------------------------------------------------------------
-
-// Same Premium Glassmorphic Dark UI Design System as AdminPanel, plus a
-// handful of table/activity-feed specific additions.
 const s = {
   page: {
     minHeight: '100vh',
@@ -159,12 +137,14 @@ export default function AdminUsers() {
 
   const [users, setUsers] = useState([])
   const [activity, setActivity] = useState([])
+  const [problemStats, setProblemStats] = useState([]) // New Analytics State
   const [fetchingUsers, setFetchingUsers] = useState(true)
   const [fetchingActivity, setFetchingActivity] = useState(true)
+  const [fetchingStats, setFetchingStats] = useState(true) // New Loading State
   const [message, setMessage] = useState({ text: '', error: false })
   const [search, setSearch] = useState('')
-  const [roleTab, setRoleTab] = useState('all') // 'all' | 'admin' | 'user'
-  const [pendingUserId, setPendingUserId] = useState(null) // id currently being toggled
+  const [roleTab, setRoleTab] = useState('all') 
+  const [pendingUserId, setPendingUserId] = useState(null) 
 
   useEffect(() => {
     if (!loading) {
@@ -202,10 +182,25 @@ export default function AdminUsers() {
     }
   }
 
+  // New Fetch Pipeline for Aggregate Problem Analytics
+  const fetchProblemStats = async () => {
+    setFetchingStats(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/db/problem-stats`, { credentials: 'include' })
+      const data = await res.json()
+      if (res.ok) setProblemStats(data.data || [])
+    } catch (err) {
+      console.error('Failed to parse problem stats:', err)
+    } finally {
+      setFetchingStats(false)
+    }
+  }
+
   useEffect(() => {
     if (user?.role === 'admin') {
       fetchUsers()
       fetchActivity()
+      fetchProblemStats() // Fired atomically with user and activity lists
     }
   }, [user])
 
@@ -325,7 +320,6 @@ export default function AdminUsers() {
           {fetchingUsers ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
               <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <p style={{ fontSize: '13px', color: '#8d85ab', margin: 0 }}>Getting the user list...</p>
             </div>
           ) : filteredUsers.length === 0 ? (
@@ -381,13 +375,72 @@ export default function AdminUsers() {
           )}
         </div>
 
+        {/* NEW: Problem Analytics Card */}
+        <div style={s.card}>
+          <p style={s.cardTitle}>📈 Problem Analytics & Solve Rates</p>
+          {fetchingStats ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
+              <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <p style={{ fontSize: '13px', color: '#8d85ab', margin: 0 }}>Computing analytics matrix...</p>
+            </div>
+          ) : problemStats.length === 0 ? (
+            <p style={{ fontSize: '13px', color: '#8d85ab', padding: '24px 0', textAlign: 'center', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px' }}>
+              No solution data compiled for current registry problems yet.
+            </p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(167, 139, 250, 0.15)', color: '#aaa3c8' }}>
+                    <th style={{ padding: '12px 8px' }}>Problem</th>
+                    <th style={{ padding: '12px 8px' }}>Difficulty</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Total Subs</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Pass/Fail Ratio</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'right' }}>User Solve Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {problemStats.map(stat => {
+                    const diffColors = { Easy: '#34d399', Medium: '#fbbf24', Hard: '#f87171' };
+                    const diffColor = diffColors[stat.problem.difficulty] || '#aaa3c8';
+                    return (
+                      <tr key={stat.problem.code} style={{ borderBottom: '1px solid rgba(167, 139, 250, 0.06)' }}>
+                        <td style={{ padding: '12px 8px' }}>
+                          <span style={{ fontWeight: '600', color: '#f3f0ff', display: 'block' }}>{stat.problem.name}</span>
+                          <span style={{ fontSize: '11px', color: '#8d85ab', fontFamily: 'Fira Code, monospace' }}>{stat.problem.code}</span>
+                        </td>
+                        <td style={{ padding: '12px 8px' }}>
+                          <span style={{ color: diffColor, fontSize: '11.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            {stat.problem.difficulty}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 8px', textAlign: 'center', color: '#dcd6f0' }}>{stat.totalSubmissions}</td>
+                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                          <span style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(167, 139, 250, 0.08)', padding: '3px 8px', borderRadius: '6px', color: '#aaa3c8', fontSize: '12px' }}>
+                            {stat.passFailRatio}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '600', color: stat.userSolveRatePercent > 60 ? '#34d399' : stat.userSolveRatePercent > 30 ? '#fb923c' : '#f87171' }}>
+                          {stat.userSolveRatePercent}% 
+                          <span style={{ display: 'block', fontSize: '11px', fontWeight: 'normal', color: '#8d85ab', marginTop: '2px' }}>
+                            ({stat.usersSolved}/{stat.usersAttempted} users)
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {/* Recent activity feed */}
         <div style={s.card}>
           <p style={s.cardTitle}>📊 Recent Activity {activity.length > 0 ? `(${activity.length})` : ''}</p>
           {fetchingActivity ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
               <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <p style={{ fontSize: '13px', color: '#8d85ab', margin: 0 }}>Fetching recent activity...</p>
             </div>
           ) : activity.length === 0 ? (

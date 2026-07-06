@@ -4,6 +4,21 @@ const Solution = require('../Models/Solutions');
 const Profile = require('../Models/Profile');
 const { recordContestSolve } = require('./contestController');
 
+// ---------------------------------------------------------------------------
+// New in this change — wire these into your db routes file if not already:
+//
+//   GET /api/db/problem-stats/:code
+//     -> single-problem solve rate + pass/fail ratio (getProblemStats)
+//
+//   GET /api/db/problem-stats
+//     -> solve rate + pass/fail ratio for every problem, hardest-first
+//        (getAllProblemStats)
+//
+// Both are read-only aggregate stats; put them behind `protect` (and
+// `requireAdmin` if this should be an admin-only dashboard rather than
+// public per-problem difficulty stats).
+// ---------------------------------------------------------------------------
+
 const insertProblem = async (req, res) => {
     try {
         const {
@@ -489,6 +504,127 @@ const getProblemSubmissions = async (req, res) => {
   }
 };
 
+// --- PER-PROBLEM SOLVE RATE / PASS-FAIL RATIO (single problem) ---
+// Two solve-rate flavors are returned because they answer different questions:
+//   - submissionSolveRatePercent: of every submission ever made on this problem,
+//     what fraction were Accepted. Skews low on problems people brute-force via
+//     repeated resubmission.
+//   - userSolveRatePercent: of the distinct users who attempted this problem,
+//     what fraction eventually got an Accepted. A truer "difficulty" signal.
+const getProblemStats = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const problem = await Problem.findOne({ code: code.toLowerCase() });
+
+    if (!problem) {
+      return res.status(404).json({ success: false, message: "Problem not found" });
+    }
+
+    const verdictCounts = await Solution.aggregate([
+      { $match: { problem: problem._id } },
+      { $group: { _id: '$verdict', count: { $sum: 1 } } }
+    ]);
+
+    const verdictBreakdown = {};
+    let totalSubmissions = 0;
+    verdictCounts.forEach(v => {
+      verdictBreakdown[v._id] = v.count;
+      totalSubmissions += v.count;
+    });
+    const acceptedCount = verdictBreakdown['Accepted'] || 0;
+    const failedCount = totalSubmissions - acceptedCount;
+
+    const [usersAttempted, usersSolved] = await Promise.all([
+      Solution.distinct('user', { problem: problem._id }),
+      Solution.distinct('user', { problem: problem._id, verdict: 'Accepted' })
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        problem: { code: problem.code, name: problem.name, difficulty: problem.difficulty },
+        totalSubmissions,
+        acceptedCount,
+        failedCount,
+        // Ratio of accepted:failed submissions. When there are zero failures,
+        // there's no meaningful ratio to divide by, so we just surface the
+        // accepted count itself (still 0 if nothing has been submitted at all).
+        passFailRatio: failedCount > 0 ? Number((acceptedCount / failedCount).toFixed(2)) : acceptedCount,
+        submissionSolveRatePercent: totalSubmissions > 0 ? Number(((acceptedCount / totalSubmissions) * 100).toFixed(2)) : 0,
+        usersAttempted: usersAttempted.length,
+        usersSolved: usersSolved.length,
+        userSolveRatePercent: usersAttempted.length > 0 ? Number(((usersSolved.length / usersAttempted.length) * 100).toFixed(2)) : 0,
+        verdictBreakdown
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Error computing problem stats: " + error.message });
+  }
+};
+
+// --- PER-PROBLEM SOLVE RATE / PASS-FAIL RATIO (every problem, for a dashboard table) ---
+const getAllProblemStats = async (req, res) => {
+  try {
+    const bucketed = await Solution.aggregate([
+      { $group: { _id: { problem: '$problem', verdict: '$verdict' }, count: { $sum: 1 } } },
+      { $group: { _id: '$_id.problem', totalSubmissions: { $sum: '$count' }, verdicts: { $push: { verdict: '$_id.verdict', count: '$count' } } } }
+    ]);
+
+    if (bucketed.length === 0) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
+    }
+
+    const [solvedAgg, attemptedAgg, problems] = await Promise.all([
+      Solution.aggregate([
+        { $match: { verdict: 'Accepted' } },
+        { $group: { _id: '$problem', usersSolved: { $addToSet: '$user' } } }
+      ]),
+      Solution.aggregate([
+        { $group: { _id: '$problem', usersAttempted: { $addToSet: '$user' } } }
+      ]),
+      Problem.find({ _id: { $in: bucketed.map(b => b._id) } }).select('name code difficulty')
+    ]);
+
+    const solvedMap = new Map(solvedAgg.map(s => [String(s._id), s.usersSolved.length]));
+    const attemptedMap = new Map(attemptedAgg.map(a => [String(a._id), a.usersAttempted.length]));
+    const problemMap = new Map(problems.map(p => [String(p._id), p]));
+
+    const data = bucketed
+      .map(b => {
+        const p = problemMap.get(String(b._id));
+        if (!p) return null; // orphaned submissions whose problem was since deleted
+
+        const verdictBreakdown = {};
+        b.verdicts.forEach(v => { verdictBreakdown[v.verdict] = v.count; });
+        const acceptedCount = verdictBreakdown['Accepted'] || 0;
+        const failedCount = b.totalSubmissions - acceptedCount;
+        const usersAttempted = attemptedMap.get(String(b._id)) || 0;
+        const usersSolved = solvedMap.get(String(b._id)) || 0;
+
+        return {
+          problem: { code: p.code, name: p.name, difficulty: p.difficulty },
+          totalSubmissions: b.totalSubmissions,
+          acceptedCount,
+          failedCount,
+          passFailRatio: failedCount > 0 ? Number((acceptedCount / failedCount).toFixed(2)) : acceptedCount,
+          submissionSolveRatePercent: b.totalSubmissions > 0 ? Number(((acceptedCount / b.totalSubmissions) * 100).toFixed(2)) : 0,
+          usersAttempted,
+          usersSolved,
+          userSolveRatePercent: usersAttempted > 0 ? Number(((usersSolved / usersAttempted) * 100).toFixed(2)) : 0,
+          verdictBreakdown
+        };
+      })
+      .filter(Boolean)
+      // Hardest (lowest user solve rate) first — the most useful default
+      // ordering for an admin/analytics dashboard glancing for weak problems.
+      .sort((a, b) => a.userSolveRatePercent - b.userSolveRatePercent);
+
+    return res.status(200).json({ success: true, count: data.length, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Error computing problem stats: " + error.message });
+  }
+};
+
 module.exports = {
     insertProblem,
     getProblems,
@@ -503,7 +639,9 @@ module.exports = {
     updateSolutionVerdict,
     getLatestSubmission, // Kept for backwards compatibility
     getUserSubmissions,
-    getProblemSubmissions
+    getProblemSubmissions,
+    getProblemStats,        // NEW
+    getAllProblemStats      // NEW
 };
 
 // ### INSERT PROBLEM
