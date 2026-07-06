@@ -598,7 +598,36 @@ export default function Coder() {
         }
     };
 
+    // AI Review must never be usable while a live, official contest attempt is
+    // running — that would give an unfair advantage over other competitors.
+    // Once the contest ends (or this is just a practice/unofficial attempt),
+    // contestInfo.isOfficial flips to false and the feature unlocks again.
+    // contestInfo === null means we're still joining/loading the attempt, so
+    // treat that as locked too (fail safe, not fail open).
+    const isAiReviewLockedByContest = Boolean(contestId) && contestInfo?.isOfficial !== false;
+
+    // Submission History must also stay hidden during a live, official contest
+    // attempt — letting a competitor browse their own past submissions mid-contest
+    // is the same kind of unfair advantage AI Review would give. Same unlock rule:
+    // it reopens once the attempt is unofficial or the contest has ended.
+    const isSubmissionsLockedByContest = Boolean(contestId) && contestInfo?.isOfficial !== false;
+
+    // If a live contest starts locking Submission History while that tab happens
+    // to be open, bounce the console back to a safe tab instead of leaving a
+    // locked-out panel showing.
+    useEffect(() => {
+        if (isSubmissionsLockedByContest && consoleMode === 'submissions') {
+            setConsoleMode('custom');
+        }
+    }, [isSubmissionsLockedByContest, consoleMode]);
+
     const handleAiReview = async () => {
+        if (isAiReviewLockedByContest) {
+            setIsDrawerOpen(true);
+            setAiReviewError('AI Review is disabled during contests.');
+            setAiReviewData(null);
+            return;
+        }
         setIsDrawerOpen(true);
         setIsAiLoading(true);
         setAiReviewError('');
@@ -782,7 +811,27 @@ export default function Coder() {
                     <button onClick={handleCustomRun} disabled={actionLoading} style={{ padding: '7px 14px', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', color: '#dcd6f0', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', fontSize: '13px', fontWeight: '500', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}>Run Code</button>
                     <button onClick={() => handleAutomatedEvaluation('run')} disabled={actionLoading} style={{ padding: '7px 14px', borderRadius: '6px', background: 'rgba(124, 58, 237, 0.2)', color: '#a78bfa', border: '1px solid rgba(59, 130, 246, 0.3)', cursor: 'pointer', fontWeight: '600', fontSize: '13px', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(124, 58, 237, 0.35)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(124, 58, 237, 0.2)'}>Run Tests</button>
                     <button onClick={() => handleAutomatedEvaluation('submit')} disabled={actionLoading} style={{ padding: '7px 18px', borderRadius: '6px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#0a0518', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '13px', transition: 'all 0.2s', boxShadow: '0 4px 12px 0 rgba(16, 185, 129, 0.25)' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>SUBMIT</button>
-                    <button onClick={handleAiReview} disabled={isAiLoading} style={{ padding: '7px 14px', borderRadius: '6px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '600', marginLeft: 'auto', fontSize: '13px', boxShadow: '0 4px 12px 0 rgba(99, 102, 241, 0.25)' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>✨ AI REVIEW</button>
+                    <button
+                        onClick={handleAiReview}
+                        disabled={isAiLoading || isAiReviewLockedByContest}
+                        title={isAiReviewLockedByContest ? 'AI Review is disabled during contests' : undefined}
+                        style={{
+                            padding: '7px 14px',
+                            borderRadius: '6px',
+                            background: isAiReviewLockedByContest ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                            color: isAiReviewLockedByContest ? '#6b6485' : '#fff',
+                            border: isAiReviewLockedByContest ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                            cursor: isAiReviewLockedByContest ? 'not-allowed' : 'pointer',
+                            fontWeight: '600',
+                            marginLeft: 'auto',
+                            fontSize: '13px',
+                            boxShadow: isAiReviewLockedByContest ? 'none' : '0 4px 12px 0 rgba(99, 102, 241, 0.25)'
+                        }}
+                        onMouseEnter={e => { if (!isAiReviewLockedByContest) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                        onMouseLeave={e => { if (!isAiReviewLockedByContest) e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
+                        {isAiReviewLockedByContest ? '🔒 AI REVIEW' : '✨ AI REVIEW'}
+                    </button>
                 </div>
 
                 <div className="cod-editor-wrap" style={{ height: `${editorHeight}%`, width: '100%', overflow: 'hidden' }}>
@@ -803,7 +852,24 @@ export default function Coder() {
                     <div className="cod-console-tabs" style={{ display: 'flex', background: 'rgba(12, 6, 28, 0.45)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                         <button onClick={() => setConsoleMode('custom')} style={{ padding: '12px 20px', background: consoleMode === 'custom' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'custom' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'custom' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Custom Console</button>
                         <button onClick={() => setConsoleMode('testcases')} style={{ padding: '12px 20px', background: consoleMode === 'testcases' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'testcases' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'testcases' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Test Run Evaluation Matrix {executionResults && `(${executionResults.filter(r => r.passed).length}/${executionResults.length})`}</button>
-                        <button onClick={() => setConsoleMode('submissions')} style={{ padding: '12px 20px', background: consoleMode === 'submissions' ? 'rgba(255,255,255,0.03)' : 'transparent', color: consoleMode === 'submissions' ? '#a78bfa' : '#aaa3c8', border: 'none', borderBottom: consoleMode === 'submissions' ? '2px solid #a78bfa' : '2px solid transparent', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}>Submission History {submissionHistory.length > 0 && `(${submissionHistory.length})`}</button>
+                        <button
+                            onClick={() => { if (!isSubmissionsLockedByContest) setConsoleMode('submissions'); }}
+                            disabled={isSubmissionsLockedByContest}
+                            title={isSubmissionsLockedByContest ? 'Submission History is disabled during contests' : undefined}
+                            style={{
+                                padding: '12px 20px',
+                                background: consoleMode === 'submissions' ? 'rgba(255,255,255,0.03)' : 'transparent',
+                                color: isSubmissionsLockedByContest ? '#5a5470' : (consoleMode === 'submissions' ? '#a78bfa' : '#aaa3c8'),
+                                border: 'none',
+                                borderBottom: consoleMode === 'submissions' ? '2px solid #a78bfa' : '2px solid transparent',
+                                cursor: isSubmissionsLockedByContest ? 'not-allowed' : 'pointer',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            {isSubmissionsLockedByContest ? '🔒 Submission History' : `Submission History ${submissionHistory.length > 0 ? `(${submissionHistory.length})` : ''}`}
+                        </button>
                     </div>
 
                     <div style={{ flex: 1, padding: '1.25rem', overflowY: 'auto' }}>
@@ -857,7 +923,13 @@ export default function Coder() {
                                 )}
                             </div>
                         )}
-                        {consoleMode === 'submissions' && (
+                        {consoleMode === 'submissions' && isSubmissionsLockedByContest && (
+                            <div style={{ padding: '16px 18px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#aaa3c8', fontSize: '13.5px', lineHeight: '1.5' }}>
+                                <strong style={{ display: 'block', marginBottom: '4px', color: '#c4b5fd' }}>🔒 Submission History disabled</strong>
+                                Submission History is disabled during contests.
+                            </div>
+                        )}
+                        {consoleMode === 'submissions' && !isSubmissionsLockedByContest && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {submissionHistory.length === 0 && (
                                     <div style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>No submissions yet for this problem. Once you submit, every attempt will show up here — click any of them to reload that version into the editor.</div>
