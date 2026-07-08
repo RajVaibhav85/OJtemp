@@ -336,6 +336,14 @@ export default function AdminPanel() {
           >
             🏆 Manage Contests
           </button>
+          <button
+            style={{ ...s.btnSecondary, background: 'rgba(56, 189, 248, 0.1)', borderColor: 'rgba(56, 189, 248, 0.25)', color: '#7dd3fc' }}
+            onClick={() => navigate(`/${user.username}/admin/analytics`)}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(56, 189, 248, 0.18)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(56, 189, 248, 0.1)'; }}
+          >
+            📈 Platform Analytics
+          </button>
           <button 
             style={s.btnSecondary} 
             onClick={() => navigate(`/${user.username}`)}

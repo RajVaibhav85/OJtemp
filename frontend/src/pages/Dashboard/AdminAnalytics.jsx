@@ -277,19 +277,11 @@ export default function AdminAnalytics() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             style={s.btnSecondary}
-            onClick={() => navigate(`/${user.username}/admin/users`)}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.28)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.14)'; }}
-          >
-            👥 User Management
-          </button>
-          <button
-            style={s.btnSecondary}
             onClick={() => navigate(`/${user.username}/admin`)}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.28)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.14)'; }}
           >
-            ← Back to Admin Panel
+            ← Admin Panel
           </button>
         </div>
       </nav>

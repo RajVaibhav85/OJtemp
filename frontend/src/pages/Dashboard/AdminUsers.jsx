@@ -300,14 +300,6 @@ export default function AdminUsers() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             style={s.btnSecondary}
-            onClick={() => navigate(`/${user.username}/admin/analytics`)}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.28)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.14)'; }}
-          >
-            📈 Platform Analytics
-          </button>
-          <button
-            style={s.btnSecondary}
             onClick={() => navigate(`/${user.username}/admin`)}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.28)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.14)'; }}
