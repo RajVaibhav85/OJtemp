@@ -130,6 +130,41 @@ const timeAgo = (dateStr) => {
   return new Date(dateStr).toLocaleDateString()
 }
 
+// Simple numbered pager — batches of PAGE_SIZE viewed one page at a time
+// instead of one long vertically-scrolling list.
+function Pager({ page, pageCount, onChange }) {
+  if (pageCount <= 1) return null
+  const pages = []
+  for (let i = 1; i <= pageCount; i++) pages.push(i)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '1.25rem', flexWrap: 'wrap' }}>
+      <button
+        onClick={() => onChange(Math.max(1, page - 1))}
+        disabled={page === 1}
+        style={{ ...s.tab, opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? 'not-allowed' : 'pointer' }}
+      >
+        ← Prev
+      </button>
+      {pages.map(p => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          style={{ ...s.tab, minWidth: '34px', ...(p === page ? s.tabActive : {}) }}
+        >
+          {p}
+        </button>
+      ))}
+      <button
+        onClick={() => onChange(Math.min(pageCount, page + 1))}
+        disabled={page === pageCount}
+        style={{ ...s.tab, opacity: page === pageCount ? 0.4 : 1, cursor: page === pageCount ? 'not-allowed' : 'pointer' }}
+      >
+        Next →
+      </button>
+    </div>
+  )
+}
+
 export default function AdminUsers() {
   const { user, loading } = useAuth()
   const navigate = useNavigate()
@@ -137,14 +172,15 @@ export default function AdminUsers() {
 
   const [users, setUsers] = useState([])
   const [activity, setActivity] = useState([])
-  const [problemStats, setProblemStats] = useState([]) // New Analytics State
   const [fetchingUsers, setFetchingUsers] = useState(true)
   const [fetchingActivity, setFetchingActivity] = useState(true)
-  const [fetchingStats, setFetchingStats] = useState(true) // New Loading State
   const [message, setMessage] = useState({ text: '', error: false })
   const [search, setSearch] = useState('')
   const [roleTab, setRoleTab] = useState('all') 
-  const [pendingUserId, setPendingUserId] = useState(null) 
+  const [pendingUserId, setPendingUserId] = useState(null)
+  const [userPage, setUserPage] = useState(1)
+  const [activityPage, setActivityPage] = useState(1)
+  const PAGE_SIZE = 10
 
   useEffect(() => {
     if (!loading) {
@@ -182,25 +218,10 @@ export default function AdminUsers() {
     }
   }
 
-  // New Fetch Pipeline for Aggregate Problem Analytics
-  const fetchProblemStats = async () => {
-    setFetchingStats(true)
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/db/problem-stats`, { credentials: 'include' })
-      const data = await res.json()
-      if (res.ok) setProblemStats(data.data || [])
-    } catch (err) {
-      console.error('Failed to parse problem stats:', err)
-    } finally {
-      setFetchingStats(false)
-    }
-  }
-
   useEffect(() => {
     if (user?.role === 'admin') {
       fetchUsers()
       fetchActivity()
-      fetchProblemStats() // Fired atomically with user and activity lists
     }
   }, [user])
 
@@ -248,6 +269,16 @@ export default function AdminUsers() {
     })
   }, [users, search, roleTab])
 
+  // Reset to page 1 whenever the filtered set changes shape, so a search/tab
+  // switch never leaves the view stranded on a now-empty page.
+  useEffect(() => { setUserPage(1) }, [search, roleTab])
+
+  const userPageCount = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
+  const pagedUsers = filteredUsers.slice((userPage - 1) * PAGE_SIZE, userPage * PAGE_SIZE)
+
+  const activityPageCount = Math.max(1, Math.ceil(activity.length / PAGE_SIZE))
+  const pagedActivity = activity.slice((activityPage - 1) * PAGE_SIZE, activityPage * PAGE_SIZE)
+
   const adminCount = users.filter(u => u.role === 'admin').length
 
   if (loading || !user || user.role !== 'admin') {
@@ -267,6 +298,14 @@ export default function AdminUsers() {
           <span style={{ color: '#a78bfa', filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.5))' }}>👥</span> User Activity & Access Control
         </p>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            style={s.btnSecondary}
+            onClick={() => navigate(`/${user.username}/admin/analytics`)}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.28)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)'; e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.14)'; }}
+          >
+            📈 Platform Analytics
+          </button>
           <button
             style={s.btnSecondary}
             onClick={() => navigate(`/${user.username}/admin`)}
@@ -293,7 +332,7 @@ export default function AdminUsers() {
 
         {/* Users + access control */}
         <div style={s.card}>
-          <p style={s.cardTitle}>🔐 Users ({users.length}) — {adminCount} admin{adminCount !== 1 ? 's' : ''}</p>
+          <p style={s.cardTitle}>🔐 Users ({filteredUsers.length}{filteredUsers.length !== users.length ? ` of ${users.length}` : ''}) — {adminCount} admin{adminCount !== 1 ? 's' : ''}</p>
 
           <div style={{ display: 'flex', gap: '16px', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
             <input
@@ -328,7 +367,7 @@ export default function AdminUsers() {
             </p>
           ) : (
             <div>
-              {filteredUsers.map(u => {
+              {pagedUsers.map(u => {
                 const isSelf = u._id === (user._id || user.id)
                 const isAdmin = u.role === 'admin'
                 return (
@@ -345,6 +384,11 @@ export default function AdminUsers() {
                         }}>
                           {isAdmin ? 'Admin' : 'User'}
                         </span>
+                        {u.isBanned && (
+                          <span style={{ ...s.roleBadge, color: '#f87171', background: 'rgba(127, 29, 29, 0.3)', border: '1px solid rgba(248, 113, 113, 0.25)' }}>
+                            Banned
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '12.5px', color: '#8d85ab', marginBottom: '6px' }}>{u.email}</div>
                       <div>
@@ -371,66 +415,7 @@ export default function AdminUsers() {
                   </div>
                 )
               })}
-            </div>
-          )}
-        </div>
-
-        {/* NEW: Problem Analytics Card */}
-        <div style={s.card}>
-          <p style={s.cardTitle}>📈 Problem Analytics & Solve Rates</p>
-          {fetchingStats ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '32px 0' }}>
-              <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              <p style={{ fontSize: '13px', color: '#8d85ab', margin: 0 }}>Computing analytics matrix...</p>
-            </div>
-          ) : problemStats.length === 0 ? (
-            <p style={{ fontSize: '13px', color: '#8d85ab', padding: '24px 0', textAlign: 'center', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px' }}>
-              No solution data compiled for current registry problems yet.
-            </p>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(167, 139, 250, 0.15)', color: '#aaa3c8' }}>
-                    <th style={{ padding: '12px 8px' }}>Problem</th>
-                    <th style={{ padding: '12px 8px' }}>Difficulty</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Total Subs</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Pass/Fail Ratio</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'right' }}>User Solve Rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {problemStats.map(stat => {
-                    const diffColors = { Easy: '#34d399', Medium: '#fbbf24', Hard: '#f87171' };
-                    const diffColor = diffColors[stat.problem.difficulty] || '#aaa3c8';
-                    return (
-                      <tr key={stat.problem.code} style={{ borderBottom: '1px solid rgba(167, 139, 250, 0.06)' }}>
-                        <td style={{ padding: '12px 8px' }}>
-                          <span style={{ fontWeight: '600', color: '#f3f0ff', display: 'block' }}>{stat.problem.name}</span>
-                          <span style={{ fontSize: '11px', color: '#8d85ab', fontFamily: 'Fira Code, monospace' }}>{stat.problem.code}</span>
-                        </td>
-                        <td style={{ padding: '12px 8px' }}>
-                          <span style={{ color: diffColor, fontSize: '11.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                            {stat.problem.difficulty}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 8px', textAlign: 'center', color: '#dcd6f0' }}>{stat.totalSubmissions}</td>
-                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                          <span style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(167, 139, 250, 0.08)', padding: '3px 8px', borderRadius: '6px', color: '#aaa3c8', fontSize: '12px' }}>
-                            {stat.passFailRatio}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '600', color: stat.userSolveRatePercent > 60 ? '#34d399' : stat.userSolveRatePercent > 30 ? '#fb923c' : '#f87171' }}>
-                          {stat.userSolveRatePercent}% 
-                          <span style={{ display: 'block', fontSize: '11px', fontWeight: 'normal', color: '#8d85ab', marginTop: '2px' }}>
-                            ({stat.usersSolved}/{stat.usersAttempted} users)
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <Pager page={userPage} pageCount={userPageCount} onChange={setUserPage} />
             </div>
           )}
         </div>
@@ -449,7 +434,7 @@ export default function AdminUsers() {
             </p>
           ) : (
             <div>
-              {activity.map(a => {
+              {pagedActivity.map(a => {
                 const vs = VERDICT_STYLES[a.verdict] || defaultVerdictStyle
                 return (
                   <div key={a._id} style={s.activityRow}>
@@ -466,6 +451,7 @@ export default function AdminUsers() {
                   </div>
                 )
               })}
+              <Pager page={activityPage} pageCount={activityPageCount} onChange={setActivityPage} />
             </div>
           )}
         </div>

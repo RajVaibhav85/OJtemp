@@ -38,6 +38,11 @@ const userSchema = new mongoose.Schema({
     isVerified: { type: Boolean, default: false },
     verificationToken: String,
     verificationTokenExpires: Date,
+    // Admin moderation flag. Set via PUT /api/admin/users/:id/ban.
+    // NOTE: this only flips the flag — enforce it wherever submissions are
+    // created (e.g. in your compiler/submit controller) with a check like
+    // `if (req.user.isBanned) return res.status(403).json(...)`.
+    isBanned: { type: Boolean, default: false },
 }, { timestamps: true })
 
 userSchema.pre('save', async function() {

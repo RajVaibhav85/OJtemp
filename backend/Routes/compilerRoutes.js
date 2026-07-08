@@ -5,6 +5,6 @@ const compilerController = require('../Controllers/compilerController')
 
 
 // router.post('/run', protect, compilerController.runCode);
-router.post('/run', compilerController.runCode);
+router.post('/run', protect, compilerController.runCode);
 
 module.exports = router;

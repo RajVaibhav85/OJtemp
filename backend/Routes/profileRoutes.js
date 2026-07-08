@@ -8,4 +8,6 @@ router.put('/update-profile', protect, profileController.updateProfile);
 
 router.get('/get-profile', protect, profileController.getProfile);
 
+router.get('/insights', protect, profileController.getProfileInsights);
+
 module.exports = router;

@@ -13,6 +13,7 @@ import ContestLeaderboard from './pages/Contests/ContestLeaderBoard'
 import ContestEvaluation from './pages/Contests/ContestEvaluation'
 import AdminContests from './pages/Contests/AdminContests'
 import AdminUsers from './pages/Dashboard/AdminUsers'
+import AdminAnalytics from './pages/Dashboard/AdminAnalytics'
 
 function App() {
   return (
@@ -63,6 +64,7 @@ function App() {
           <Route path="/contests/admin" element={<AdminContests />} />
           <Route path="*" element={<Navigate to="/auth" replace />} />
           <Route path="/:username/admin/users" element={<AdminUsers />} />
+          <Route path="/:username/admin/analytics" element={<AdminAnalytics />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

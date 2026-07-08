@@ -116,6 +116,7 @@ JUDGE_IMAGES.forEach((img) => {
 });
 
 app.listen(PORT, () => {
-    const activeLink = process.env.SERVER_URL || `http://localhost:${PORT}`;
+    const activeLink = `http://15.134.139.206:5000` || `http://localhost:${PORT}`;
     console.log(`🚀 Server actively listening at: ${activeLink}`);
+    
 });

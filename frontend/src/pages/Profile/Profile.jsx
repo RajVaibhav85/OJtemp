@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../components/AuthContext';
+import {
+  ResponsiveContainer, LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend
+} from 'recharts';
+import StreakHeatmap from './StreakHeatmap';
 
 const BACKEND_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
@@ -9,10 +14,19 @@ const AVAILABLE_FRAMEWORKS = ['Node.js', 'React', 'Express', 'NestJS', 'Next.js'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: 'chart' },
+  { id: 'insights', label: 'Insights', icon: 'flame' },
   { id: 'edit', label: 'Edit Profile', icon: 'user' },
   { id: 'submissions', label: 'Submissions', icon: 'history' },
   { id: 'security', label: 'Security', icon: 'shield' },
 ];
+
+const CHART_TOOLTIP_STYLE = {
+  background: 'rgba(18, 10, 36, 0.95)',
+  border: '1px solid rgba(167, 139, 250, 0.25)',
+  borderRadius: '8px',
+  fontSize: '12px',
+  color: '#f3f0ff'
+};
 
 // Minimal feather-style icon set so the navbar has no external icon dependency.
 function Icon({ name, size = 17 }) {
@@ -26,6 +40,8 @@ function Icon({ name, size = 17 }) {
       return <svg {...common}><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l4 2" /></svg>;
     case 'shield':
       return <svg {...common}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /></svg>;
+    case 'flame':
+      return <svg {...common}><path d="M12 2c1 3-2 4-2 7a3 3 0 0 0 6 0c1 2 2 4 2 6a6 6 0 1 1-12 0c0-4 3-6 4-9 0-1 1-3 2-4Z" /></svg>;
     case 'back':
       return <svg {...common}><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>;
     default:
@@ -91,7 +107,13 @@ const s = {
   heroStat: { textAlign: 'center', padding: '0 18px' },
   heroStatNum: { fontSize: '22px', fontWeight: '700', color: '#a78bfa', letterSpacing: '-0.02em' },
   heroStatLabel: { fontSize: '10.5px', fontWeight: '600', textTransform: 'uppercase', color: '#8d85ab', letterSpacing: '0.05em', marginTop: '2px' },
-  container: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' },
+  container: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gridTemplateAreas: `"analytics bio" "skills bio" "history history"`,
+    gap: '2rem',
+    alignItems: 'stretch'
+  },
   card: {
     background: 'rgba(26, 16, 46, 0.42)',
     backdropFilter: 'blur(12px)',
@@ -175,6 +197,15 @@ export default function Profile() {
   const [submissions, setSubmissions] = useState([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(true);
 
+  const [insights, setInsights] = useState({
+    heatmap: [],
+    streaks: { currentStreak: 0, longestStreak: 0 },
+    languageStats: [],
+    recentActivity: [],
+    progressOverTime: []
+  });
+  const [loadingInsights, setLoadingInsights] = useState(true);
+
   // Account security: change password
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -247,6 +278,26 @@ export default function Profile() {
     };
     fetchSubmissions();
   }, [user]);
+
+  useEffect(() => {
+    const fetchInsights = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/profile/insights`, {
+          method: 'GET',
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const { data } = await res.json();
+          if (data) setInsights(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingInsights(false);
+      }
+    };
+    fetchInsights();
+  }, []);
 
   // Clicking a submission takes the user straight back into the editor with
   // that exact version of the code loaded. Route is /:username/:code.
@@ -394,7 +445,7 @@ export default function Profile() {
           .pr-hero-stats { width: 100%; justify-content: space-between !important; }
           .pr-hero-bio { max-width: none !important; white-space: normal !important; }
           .pr-grid-2 { grid-template-columns: 1fr !important; }
-          .pr-container { grid-template-columns: 1fr !important; }
+          .pr-container { grid-template-columns: 1fr !important; grid-template-areas: "analytics" "bio" "skills" "history" !important; }
           .pr-card { padding: 1.5rem !important; }
         }
       `}</style>
@@ -463,7 +514,7 @@ export default function Profile() {
         {/* ---------------- OVERVIEW TAB ---------------- */}
         {activeTab === 'overview' && (
           <div style={s.container} className="pr-container">
-            <div style={s.card} className="pr-card">
+            <div style={{ ...s.card, gridArea: 'analytics' }} className="pr-card">
               <h3 style={s.title}>Algorithmic Mastery Analytics</h3>
               <div className="pr-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'center' }}>
                 <div style={{ background: 'rgba(12, 6, 28, 0.45)', padding: '24px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(167, 139, 250, 0.1)' }}>
@@ -484,7 +535,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div style={s.card} className="pr-card">
+            <div style={{ ...s.card, gridArea: 'bio', display: 'flex', flexDirection: 'column' }} className="pr-card">
               <h3 style={s.title}>Bio &amp; Links</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 <div>
@@ -517,7 +568,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div style={s.card} className="pr-card">
+            <div style={{ ...s.card, gridArea: 'skills' }} className="pr-card">
               <h3 style={s.title}>Developer Skill Stack Summary</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div>
@@ -537,7 +588,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div style={{ ...s.card, gridColumn: '1 / -1' }} className="pr-card">
+            <div style={{ ...s.card, gridArea: 'history' }} className="pr-card">
               <h3 style={s.title}>Mastered Matrix History Slugs</h3>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
                 {stats.solvedProblemsList.map(slug => (
@@ -551,6 +602,108 @@ export default function Profile() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ---------------- INSIGHTS TAB ---------------- */}
+        {activeTab === 'insights' && (
+          loadingInsights ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '48px 0' }}>
+              <div style={{ width: '22px', height: '22px', border: '3px solid rgba(167, 139, 250, 0.2)', borderTopColor: '#a78bfa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <span style={{ color: '#6f6790', fontSize: '13px' }}>Crunching your activity...</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              {/* Streak heatmap */}
+              <div style={s.card} className="pr-card">
+                <h3 style={s.title}>Solving Streak</h3>
+                <StreakHeatmap
+                  heatmap={insights.heatmap}
+                  currentStreak={insights.streaks.currentStreak}
+                  longestStreak={insights.streaks.longestStreak}
+                />
+              </div>
+
+              <div className="pr-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' }}>
+                {/* Progress over time */}
+                <div style={s.card} className="pr-card">
+                  <h3 style={s.title}>Progress Over Time</h3>
+                  {insights.progressOverTime.length === 0 ? (
+                    <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>Solve a few problems to see your progress curve here.</span>
+                  ) : (
+                    <div style={{ width: '100%', height: 220 }}>
+                      <ResponsiveContainer>
+                        <LineChart data={insights.progressOverTime} margin={{ top: 5, right: 12, left: -18, bottom: 0 }}>
+                          <CartesianGrid stroke="rgba(167, 139, 250, 0.1)" vertical={false} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#8d85ab' }} tickLine={false} axisLine={{ stroke: 'rgba(167, 139, 250, 0.15)' }} minTickGap={24} />
+                          <YAxis tick={{ fontSize: 10, fill: '#8d85ab' }} tickLine={false} axisLine={false} allowDecimals={false} />
+                          <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={{ color: '#aaa3c8' }} />
+                          <Line type="monotone" dataKey="solved" name="Problems solved" stroke="#a78bfa" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+
+                {/* Language-wise stats */}
+                <div style={s.card} className="pr-card">
+                  <h3 style={s.title}>Language-Wise Stats</h3>
+                  {insights.languageStats.length === 0 ? (
+                    <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>No submissions yet to break down by language.</span>
+                  ) : (
+                    <>
+                      <div style={{ width: '100%', height: 180, marginBottom: '12px' }}>
+                        <ResponsiveContainer>
+                          <BarChart data={insights.languageStats} margin={{ top: 5, right: 12, left: -18, bottom: 0 }}>
+                            <CartesianGrid stroke="rgba(167, 139, 250, 0.1)" vertical={false} />
+                            <XAxis dataKey="language" tick={{ fontSize: 10, fill: '#8d85ab' }} tickLine={false} axisLine={{ stroke: 'rgba(167, 139, 250, 0.15)' }} />
+                            <YAxis tick={{ fontSize: 10, fill: '#8d85ab' }} tickLine={false} axisLine={false} allowDecimals={false} />
+                            <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={{ color: '#aaa3c8' }} cursor={{ fill: 'rgba(167, 139, 250, 0.08)' }} />
+                            <Legend wrapperStyle={{ fontSize: '11px', color: '#aaa3c8' }} />
+                            <Bar dataKey="problemsSolved" name="Solved" fill="#34d399" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="totalSubmissions" name="Submissions" fill="#a78bfa" radius={[4, 4, 0, 0]} fillOpacity={0.6} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {insights.languageStats.map(l => (
+                          <div key={l.language} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', background: 'rgba(12, 6, 28, 0.25)', padding: '6px 10px', borderRadius: '6px' }}>
+                            <span style={{ color: '#c7bfe0', fontWeight: 500 }}>{l.language}</span>
+                            <span style={{ color: '#8d85ab' }}>{l.problemsSolved} solved · {l.accuracyPercent}% accuracy</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Recent activity */}
+              <div style={s.card} className="pr-card">
+                <h3 style={s.title}>Recent Activity</h3>
+                {insights.recentActivity.length === 0 ? (
+                  <span style={{ color: '#6f6790', fontSize: '13px', fontStyle: 'italic' }}>No recent activity yet.</span>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {insights.recentActivity.map(a => {
+                      const verdictColor = a.verdict === 'Accepted' ? '#34d399' : (a.verdict === 'Pending' ? '#fbbf24' : '#f87171');
+                      return (
+                        <div key={a._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', background: 'rgba(12, 6, 28, 0.3)', border: `1px solid ${verdictColor}33`, borderRadius: '8px', padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, fontSize: '13px', color: '#f3f0ff' }}>{a.problem?.name || a.problem?.code || 'Unknown problem'}</span>
+                            <span style={{ fontSize: '11px', color: '#8d85ab', fontFamily: 'Fira Code, monospace', background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: '4px' }}>{a.language}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '12px', color: verdictColor }}>{a.verdict}</span>
+                            <span style={{ fontSize: '11.5px', color: '#6f6790', minWidth: '90px', textAlign: 'right' }}>{new Date(a.submittedAt).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
         )}
 
         {/* ---------------- EDIT PROFILE TAB ---------------- */}
