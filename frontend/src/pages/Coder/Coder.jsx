@@ -11,10 +11,10 @@ const AUTH_API = `${BACKEND_URL}/api/auth`;
 const CONTEST_API = `${BACKEND_URL}/api/contests`;
 
 const boilerplates = {
-    cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    int number;\n    // Read input\n    cin >> number;\n    // Write output\n    cout << "You entered: " << number << endl;\n    return 0;\n}`,
-    python: `# Read input from standard input\nuser_input = input()\n# Write output\nprint(f"You entered: {user_input}")`,
-    javascript: `// In Node.js, reading from standard input requires standard streams\nconst fs = require('fs');\n\nfunction main() {\n    // Reads all input from standard input\n    const input = fs.readFileSync(0, 'utf-8').trim();\n    console.log("You entered: " + input);\n}\n\nmain();`,
-    java: `import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        // Read input\n        if (scanner.hasNext()) {\n            String input = scanner.next();\n            System.out.println("You entered: " + input);\n        }\n        scanner.close();\n    }\n}`
+    cpp: `#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // Start coding here\n\n    return 0;\n}`,
+    python: `# Start coding here\n`,
+    javascript: `// Start coding here\n`,
+    java: `public class Main {\n    public static void main(String[] args) {\n        // Start coding here\n\n    }\n}`
 };
 
 const languageMapping = {
@@ -63,6 +63,15 @@ export default function Coder() {
     const [testCases, setTestCases] = useState([]);
     const [fetchingData, setFetchingData] = useState(true);
     const [language, setLanguage] = useState('cpp');
+    // Mirrors `language`, but updated synchronously (unlike the state itself).
+    // Needed because editor.setValue() fires onChange synchronously, inside
+    // the same call stack as handleLanguageChange — before React has
+    // committed the setLanguage() update. Without this, the debounced draft
+    // save in handleEditorChange reads the OLD `language` from its closure
+    // and writes the NEW language's code into the OLD language's localStorage
+    // slot, corrupting it (this was the cause of "switching back to a
+    // language shows the other language's code").
+    const languageRef = useRef('cpp');
 
     const [codeCache, setCodeCache] = useState({
         cpp: boilerplates.cpp,
@@ -191,6 +200,7 @@ export default function Coder() {
 
                 if (isMounted) {
                     setCodeCache(prev => ({ ...prev, [initialLang]: initialCode }));
+                    languageRef.current = initialLang;
                     if (initialLang !== language) setLanguage(initialLang);
                     if (editorRef.current) editorRef.current.setValue(initialCode);
                 }
@@ -300,7 +310,7 @@ export default function Coder() {
         if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
         draftSaveTimeoutRef.current = setTimeout(() => {
             try {
-                localStorage.setItem(getDraftKey(problemCode, language), value ?? '');
+                localStorage.setItem(getDraftKey(problemCode, languageRef.current), value ?? '');
             } catch (_) { /* localStorage unavailable, skip */ }
         }, 400);
     };
@@ -340,6 +350,10 @@ export default function Coder() {
             : resolveCodeForLanguage(newLang);
 
         setCodeCache(prev => ({ ...prev, [newLang]: nextCode }));
+        // Must happen BEFORE setValue below — setValue fires onChange
+        // synchronously, and handleEditorChange reads languageRef.current
+        // to decide which draft slot to save into.
+        languageRef.current = newLang;
         setLanguage(newLang);
         if (editorRef.current) editorRef.current.setValue(nextCode);
     };
@@ -363,6 +377,7 @@ export default function Coder() {
             localStorage.setItem(getDraftKey(problemCode, feLang), sub.code);
         } catch (_) { /* localStorage unavailable, skip */ }
 
+        languageRef.current = feLang;
         setLanguage(feLang);
         if (editorRef.current) editorRef.current.setValue(sub.code);
         setConsoleMode('custom');
@@ -459,61 +474,78 @@ export default function Coder() {
         let maxTimeSpent = 0;
         let maxMemoryConsumed = 0;
 
+        // Runs one test case against the compiler service and normalizes the result.
+        const runSingleTest = async (tc, idx) => {
+            try {
+                const response = await apiFetch(`${COMPILER_API}/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language, code: activeCodeBuffer, input: tc.input })
+                });
+                const data = await response.json();
+
+                // Track maximum peak metrics dynamically
+                if (data.executionTime > maxTimeSpent) maxTimeSpent = data.executionTime;
+                if (data.memory > maxMemoryConsumed) maxMemoryConsumed = data.memory;
+
+                const matched = response.ok && (tc.output.trim() === (data.output || '').trim());
+
+                // Classify *why* a test failed. `data.verdict` comes straight from the
+                // backend's Docker sandbox ('Time Limit Exceeded' | 'Compilation Error' |
+                // 'Runtime Error') for non-2xx responses; a 2xx response with a mismatched
+                // output is always a Wrong Answer. This failureType (not raw stdout/stderr)
+                // is what's safe to show even on hidden tests.
+                const failureType = matched
+                    ? null
+                    : (!response.ok ? (data.verdict || 'Runtime Error') : 'Wrong Answer');
+
+                return {
+                    id: tc._id || idx,
+                    input: tc.input,
+                    expectedOutput: tc.output,
+                    actualOutput: data.output || '',
+                    // Compile/crash message — always safe to reveal, since it describes
+                    // how the submitted code as a whole failed, not the hidden test data.
+                    errorMessage: !response.ok ? (data.error || 'Execution failed.') : null,
+                    isHidden: tc.isHidden,
+                    passed: matched,
+                    failureType,
+                    diagnostics: response.ok ? `Success (${data.executionTime}ms)` : (data.verdict || 'Fault')
+                };
+            } catch {
+                return {
+                    id: tc._id || idx,
+                    input: tc.input,
+                    expectedOutput: tc.output,
+                    actualOutput: '',
+                    errorMessage: 'Transport connection failure loops.',
+                    isHidden: tc.isHidden,
+                    passed: false,
+                    failureType: 'Runtime Error',
+                    diagnostics: 'Disconnected'
+                };
+            }
+        };
+
         try {
-            const tasks = targets.map(async (tc, idx) => {
-                try {
-                    const response = await apiFetch(`${COMPILER_API}/run`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ language, code: activeCodeBuffer, input: tc.input })
-                    });
-                    const data = await response.json();
-                    
+            // Compilation happens fresh per Docker run, before any test input is
+            // read — so if the code doesn't compile, EVERY test case fails with
+            // the exact same message. Probe with just the first test case first;
+            // if that's a Compilation Error, there's no point (or value) in
+            // running the other N-1 and showing the identical error N-1 more times.
+            const probe = await runSingleTest(targets[0], 0);
 
-                    // Track maximum peak metrics dynamically
-                    if (data.executionTime > maxTimeSpent) maxTimeSpent = data.executionTime;
-                    if (data.memory > maxMemoryConsumed) maxMemoryConsumed = data.memory;
+            if (probe.failureType === 'Compilation Error') {
+                setExecutionResults([probe]);
+                setVerdictMessage('❌ Compilation Error — fix the error below before running test cases.');
+                setActionLoading(false);
+                return;
+            }
 
-                    const matched = response.ok && (tc.output.trim() === (data.output || '').trim());
-
-                    // Classify *why* a test failed. `data.verdict` comes straight from the
-                    // backend's Docker sandbox ('Time Limit Exceeded' | 'Compilation Error' |
-                    // 'Runtime Error') for non-2xx responses; a 2xx response with a mismatched
-                    // output is always a Wrong Answer. This failureType (not raw stdout/stderr)
-                    // is what's safe to show even on hidden tests.
-                    const failureType = matched
-                        ? null
-                        : (!response.ok ? (data.verdict || 'Runtime Error') : 'Wrong Answer');
-
-                    return {
-                        id: tc._id || idx,
-                        input: tc.input,
-                        expectedOutput: tc.output,
-                        actualOutput: data.output || '',
-                        // Compile/crash message — always safe to reveal, since it describes
-                        // how the submitted code as a whole failed, not the hidden test data.
-                        errorMessage: !response.ok ? (data.error || 'Execution failed.') : null,
-                        isHidden: tc.isHidden,
-                        passed: matched,
-                        failureType,
-                        diagnostics: response.ok ? `Success (${data.executionTime}ms)` : (data.verdict || 'Fault')
-                    };
-                } catch {
-                    return {
-                        id: tc._id || idx,
-                        input: tc.input,
-                        expectedOutput: tc.output,
-                        actualOutput: '',
-                        errorMessage: 'Transport connection failure loops.',
-                        isHidden: tc.isHidden,
-                        passed: false,
-                        failureType: 'Runtime Error',
-                        diagnostics: 'Disconnected'
-                    };
-                }
-            });
-
-            const outputs = await Promise.all(tasks);
+            const restOutputs = targets.length > 1
+                ? await Promise.all(targets.slice(1).map((tc, i) => runSingleTest(tc, i + 1)))
+                : [];
+            const outputs = [probe, ...restOutputs];
             setExecutionResults(outputs);
 
             const errorsFound = outputs.some(item => !item.passed);
@@ -883,11 +915,27 @@ export default function Coder() {
                         )}
                         {consoleMode === 'testcases' && (
                             <div>
-                                {verdictMessage && (
-                                    <div style={{ padding: '12px 16px', borderRadius: '8px', background: verdictMessage.includes('🟢') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${verdictMessage.includes('🟢') ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`, color: verdictMessage.includes('🟢') ? '#34d399' : '#f87171', fontWeight: '600', marginBottom: '16px', fontSize: '13px', backdropFilter: 'blur(4px)' }}>
-                                        {verdictMessage}
-                                    </div>
-                                )}
+                                {verdictMessage && (() => {
+                                    // While a run is still in flight, show a neutral "in progress"
+                                    // blue instead of falling through to the red error styling —
+                                    // red should mean something actually failed, not "still working".
+                                    const isRunning = actionLoading;
+                                    const isSuccess = !isRunning && verdictMessage.includes('🟢');
+                                    const bannerStyle = isRunning
+                                        ? { bg: 'rgba(96, 165, 250, 0.1)', border: 'rgba(96, 165, 250, 0.35)', color: '#60a5fa' }
+                                        : isSuccess
+                                            ? { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', color: '#34d399' }
+                                            : { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', color: '#f87171' };
+                                    return (
+                                        <div style={{ padding: '12px 16px', borderRadius: '8px', background: bannerStyle.bg, border: `1px solid ${bannerStyle.border}`, color: bannerStyle.color, fontWeight: '600', marginBottom: '16px', fontSize: '13px', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            {isRunning && (
+                                                <span style={{ width: '13px', height: '13px', borderRadius: '50%', border: '2px solid rgba(96, 165, 250, 0.3)', borderTopColor: '#60a5fa', display: 'inline-block', animation: 'cod-spin 0.7s linear infinite', flexShrink: 0 }} />
+                                            )}
+                                            {verdictMessage}
+                                        </div>
+                                    );
+                                })()}
+                                <style>{`@keyframes cod-spin { to { transform: rotate(360deg); } }`}</style>
                                 {executionResults && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                         {executionResults.map((res, i) => {

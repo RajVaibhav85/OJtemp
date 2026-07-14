@@ -20,14 +20,14 @@ connectDB()
 const PORT = process.env.PORT || 5000;
 
 // Resolve application metadata at boot time
-let appVersion = '1.0.0';
+let appVersion = '2.0.0';
 let gitCommit = 'unknown';
 
 try {
     // Dynamically grab version from package.json
     appVersion = require('./package.json').version;
 } catch (err) {
-    appVersion = process.env.APP_VERSION || '2.0.0';
+    appVersion = process.env.APP_VERSION || '1.0.0';
 }
 
 try {

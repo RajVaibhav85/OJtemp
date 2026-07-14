@@ -126,7 +126,11 @@ const s = {
   tagBadge: { fontSize: '12px', fontWeight: '500', padding: '6px 14px', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' },
   problemRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 0', borderBottom: '1px solid rgba(167, 139, 250, 0.08)' },
   actionBtn: { padding: '8px 14px', fontSize: '12px', fontWeight: '600', borderRadius: '8px', border: '1px solid transparent', cursor: 'pointer', marginLeft: '8px', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' },
-  testCaseRow: { background: 'rgba(12, 6, 28, 0.35)', border: '1px solid rgba(167, 139, 250, 0.1)', borderRadius: '12px', padding: '16px', marginBottom: '12px' }
+  testCaseRow: { background: 'rgba(12, 6, 28, 0.35)', border: '1px solid rgba(167, 139, 250, 0.1)', borderRadius: '12px', padding: '16px', marginBottom: '12px' },
+  healthGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' },
+  healthStat: { background: 'rgba(12, 6, 28, 0.4)', border: '1px solid rgba(167, 139, 250, 0.1)', borderRadius: '12px', padding: '16px 18px' },
+  healthLabel: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8d85ab', marginBottom: '6px' },
+  healthValue: { fontSize: '15px', fontWeight: '600', color: '#f3f0ff', fontFamily: 'Fira Code, SFMono-Regular, JetBrains Mono, monospace' }
 }
 
 export default function AdminPanel() {
@@ -147,6 +151,40 @@ export default function AdminPanel() {
   const [testCases, setTestCases] = useState([])
   const [isEditingTestCaseId, setIsEditingTestCaseId] = useState(null)
   const [tcForm, setTcForm] = useState({ input: '', output: '', isHidden: false })
+
+  const [health, setHealth] = useState(null)
+  const [healthError, setHealthError] = useState(false)
+  const [healthLoading, setHealthLoading] = useState(true)
+  const [healthCheckedAt, setHealthCheckedAt] = useState(null)
+
+  const fetchHealth = async () => {
+    setHealthLoading(true)
+    try {
+      const res = await fetch(`${BACKEND_URL}/`)
+      const data = await res.json()
+      if (res.ok) {
+        setHealth(data)
+        setHealthError(false)
+      } else {
+        setHealth(null)
+        setHealthError(true)
+      }
+    } catch (err) {
+      setHealth(null)
+      setHealthError(true)
+    } finally {
+      setHealthLoading(false)
+      setHealthCheckedAt(new Date())
+    }
+  }
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchHealth()
+      const interval = setInterval(fetchHealth, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
 
   useEffect(() => {
     if (!loading) {
@@ -313,6 +351,10 @@ export default function AdminPanel() {
           .adm-full-width { grid-column: span 1 !important; }
           .adm-problem-row { flex-direction: column !important; align-items: flex-start !important; gap: 10px; }
           .adm-problem-row > div:last-child { width: 100%; }
+          .adm-health-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .adm-health-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
       <nav style={s.nav} className="adm-nav">
@@ -378,6 +420,82 @@ export default function AdminPanel() {
             {message.text}
           </div>
         )}
+
+        {/* Server Health Status */}
+        <div style={s.card} className="adm-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '10px' }}>
+            <p style={{ ...s.cardTitle, margin: 0 }}>🩺 Server Health</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {healthCheckedAt && (
+                <span style={{ fontSize: '12px', color: '#8d85ab' }}>
+                  Last checked {healthCheckedAt.toLocaleTimeString()}
+                </span>
+              )}
+              <button
+                type="button"
+                style={{ ...s.btnSecondary, padding: '8px 16px', fontSize: '12px' }}
+                onClick={fetchHealth}
+                disabled={healthLoading}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(167, 139, 250, 0.14)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(167, 139, 250, 0.06)'}
+              >
+                {healthLoading ? 'Checking…' : '↻ Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {healthError ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '12px', padding: '18px 20px',
+              borderRadius: '12px', background: 'rgba(127, 29, 29, 0.25)',
+              border: '1px solid rgba(248, 113, 113, 0.25)'
+            }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f87171', flexShrink: 0, boxShadow: '0 0 8px rgba(248, 113, 113, 0.6)' }} />
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#fca5a5' }}>Backend unreachable</div>
+                <div style={{ fontSize: '12px', color: '#c7a3a3', marginTop: '2px' }}>
+                  Could not reach {BACKEND_URL}/. The server may be down or unreachable from this network.
+                </div>
+              </div>
+            </div>
+          ) : health ? (
+            <>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem',
+                padding: '10px 16px', borderRadius: '10px', width: 'fit-content',
+                background: 'rgba(6, 78, 59, 0.25)', border: '1px solid rgba(52, 211, 153, 0.25)'
+              }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px rgba(52, 211, 153, 0.7)' }} />
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#6ee7b7' }}>
+                  {health.status || 'UP'} · {health.health || 'healthy'}
+                </span>
+              </div>
+
+              <div style={s.healthGrid} className="adm-health-grid">
+                <div style={s.healthStat}>
+                  <div style={s.healthLabel}>Uptime</div>
+                  <div style={s.healthValue}>{health.uptime || '—'}</div>
+                </div>
+                <div style={s.healthStat}>
+                  <div style={s.healthLabel}>Version</div>
+                  <div style={s.healthValue}>{health.version || '—'}</div>
+                </div>
+                <div style={s.healthStat}>
+                  <div style={s.healthLabel}>Commit</div>
+                  <div style={s.healthValue}>{health.commit || '—'}</div>
+                </div>
+                <div style={s.healthStat}>
+                  <div style={s.healthLabel}>Server Time</div>
+                  <div style={s.healthValue}>
+                    {health.timestamp ? new Date(health.timestamp).toLocaleTimeString() : '—'}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p style={{ fontSize: '13px', color: '#8d85ab' }}>Checking server status…</p>
+          )}
+        </div>
 
         {/* Problem Creation/Editing Section */}
         <div style={s.card} className="adm-card">
